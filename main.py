@@ -16,7 +16,7 @@ theoretically, this should work for any data type, so for testing purposes, I wi
 list of length 10
 
 k_max: 2*k_max + 1 = the maximum number of texts the algorithm will compare texts to every pass; it
-should probably be 3 or more
+should probably be 2 or more
 '''
 
 def init_sort(texts, k_max):
