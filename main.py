@@ -6,9 +6,6 @@ import bisect # testing
 df = pd.read_csv('all.csv')
 poems = df["content"]
 
-
-
-
 '''
 initial sorting algorithm
 
@@ -29,6 +26,10 @@ def insert(text, sorted_texts, k_max):
 	if len(sorted_texts) == 0:
 		sorted_texts.append(text)
 		return
+	# print(bottom, middle, top, k) # debugging
+	sorted_texts.insert(bin_search(text, sorted_texts, k_max), text)
+
+def bin_search(text, sorted_texts, k_max):
 	bottom = 0
 	top = len(sorted_texts) - 1
 	middle = (top + bottom) // 2
@@ -42,15 +43,12 @@ def insert(text, sorted_texts, k_max):
 		# if k is too big, which would make the index i out of bounds, then set k to the maximum 
 		# value it can be
 		# print(bottom, middle, top, k) # debugging
-
 		if k > (top - bottom) // 2: 
 			k = (top - bottom) // 2
-
-
 		difficult_texts = 0 # i.e. texts in the ROTIUL more difficult than the text drawn from
 							# the unsorted list
 		for i in range(middle - k, middle + k + 1):
-			if algo(text, sorted_texts[i]) < 0:
+			if compare(text, sorted_texts[i]) < 0:
 				difficult_texts += 1
 		# print("difficult_texts:", difficult_texts)
 		if difficult_texts > k: # i.e. majority of texts in ROTIUL more difficult than given text
@@ -58,15 +56,11 @@ def insert(text, sorted_texts, k_max):
 		else:
 			bottom = middle + 1
 		middle = (top + bottom) // 2
-
-	# print(bottom, middle, top, k) # debugging
-	sorted_texts.insert(bottom, text)
-
-
+	return bottom
 
 # algorithm by which texts are compared; the comparator
 
-def algo(text1, text2):
+def compare(text1, text2):
 	# TEMPORARY COMPARATOR FOR INTS:
 	return text1 - text2
 
@@ -114,27 +108,34 @@ def algo(text1, text2):
 
 
 # 100 RANDOM TESTS INSERT VALUE TEST:
-print("running 100 random tests:")
-for i in range(0, 100):
-	# make a random, sorted list of 1 - 20 integers with values between 0 and 100
-	random_sorted_list = sorted(random.sample(range(0, 100), random.randint(1, 20)))
-	print("initial list:", random_sorted_list)
-	# make a random integer between 0 and 100
-	random_int = random.randint(0, 100)
-	print("initial integer:", random_int)
-	# insert that integer with random k value between 3 and 10 using our algorithm
-	inserted_list = random_sorted_list[:] # makes a copy of random_sorted_list
-	insert(random_int, inserted_list, random.randint(3, 10))
-	print("list with integer inserted by algorithm:", inserted_list)
-	# insert integer with python's bisect algorithm
-	bisected_list = random_sorted_list[:]
-	bisect.insort(bisected_list, random_int)
-	print("list with integer inserted by bisect:", bisected_list)
-	# checks if two sorted lists equal
-	for i in range(0, len(random_sorted_list)):
-		if (inserted_list[i] != bisected_list[i]):
-			print("INESRTED_LIST NOT EQUAL TO BISECTED_LIST")
-			quit()
-	print("inserted_list == bisected_list")
+# print("running 100 random tests:")
+# for i in range(0, 100):
+# 	# make a random, sorted list of 1 - 20 integers with values between 0 and 100
+# 	random_sorted_list = sorted(random.sample(range(0, 100), random.randint(1, 20)))
+# 	print("initial list:", random_sorted_list)
+# 	# make a random integer between 0 and 100
+# 	random_int = random.randint(0, 100)
+# 	print("initial integer:", random_int)
+# 	# insert that integer with random k value between 3 and 10 using our algorithm
+# 	inserted_list = random_sorted_list[:] # makes a copy of random_sorted_list
+# 	insert(random_int, inserted_list, random.randint(3, 10))
+# 	print("list with integer inserted by algorithm:", inserted_list)
+# 	# insert integer with python's bisect algorithm
+# 	bisected_list = random_sorted_list[:]
+# 	bisect.insort(bisected_list, random_int)
+# 	print("list with integer inserted by bisect:", bisected_list)
+# 	# checks if two sorted lists equal
+# 	for i in range(0, len(random_sorted_list)):
+# 		if (inserted_list[i] != bisected_list[i]):
+# 			print("INESRTED_LIST NOT EQUAL TO BISECTED_LIST")
+# 			quit()
+# 	print("inserted_list == bisected_list")
 
 
+
+# TESTING 100 RANDOM binary search integers
+test = [0,1,2,3,4,5,6,7, 8,9,10]
+num = 8
+print(insert(num, test, 2))
+print(test)
+print(bin_search(num, test, 2))
