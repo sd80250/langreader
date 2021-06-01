@@ -1,7 +1,8 @@
-env
-cc_net 
-news-please
 data.csv
 data.db
 time_for_kids_scraped.txt
 all.csv
+env/
+cc_net/ 
+news-please/
+__pycache__/

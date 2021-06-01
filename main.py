@@ -70,9 +70,30 @@ def compare(text1, text2):
     # else:
     # 	return -1
 
+def terminal_app():
+	options_str = """
+	1: Get Started
+	2: Find text with similar difficulty to my text
+	3: Find text with similar difficulty to a text in the corpus
+	4: Search corpus
+	"""
+	print("""
+	Welcome to the Big Fat Proto-Prototype Repository of Texts!
+	Find a text that's right for you by typing the number corresponding to the options below.
+	""" + options_str)
+	while True:
+		option = int(input())
+		if option == 1:
+			print("Sorry, I'd like to get us started, but we need to finish getting the global log frequency vector first.")
+		if option == 2:
+			print("Sorry, I'd like to find a text with a similar difficulty to your text, but we need to finish getting the global log frequency vector first.")
+		if option == 3:
+			print("Sorry, I'd like to find a text with a similar difficulty to a text in our corpus, but we need to finish getting the corpus in the first place.")
+		if option == 4:
+			print("Sorry, I'd like to let you search our non-existent corpus, but I've been informed that that's metaphysically impossible.")
+		print("Is there anything else I can help you with?\n" + options_str)
 
-
-
+terminal_app()
 # TESTS
 # ---------------
 
@@ -83,7 +104,7 @@ def compare(text1, text2):
 # random.shuffle(test_int_list)
 # print("initially sort the texts:")
 # print("initial list:", test_int_list)
-# print(init_sort(test_int_list, 3)) # debug
+# print(init_sort(test_int_list, 3)) 
 # print(init_sort(poems, 3))
 
 
@@ -134,8 +155,8 @@ def compare(text1, text2):
 
 
 # TESTING 100 RANDOM binary search integers
-test = [0,1,2,3,4,5,6,7, 8,9,10]
-num = 8
-print(insert(num, test, 2))
-print(test)
-print(bin_search(num, test, 2))
+# test = [0,1,2,3,4,5,6,7, 8,9,10]
+# num = 8
+# print(insert(num, test, 2))
+# print(test)
+# print(bin_search(num, test, 2))
