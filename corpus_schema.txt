@@ -1,0 +1,4 @@
+CREATE TABLE Training (
+    article_text TEXT UNIQUE,
+    difficult BOOLEAN NOT NULL CHECK (difficult IN (0, 1))
+);

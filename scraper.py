@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 from nltk.tokenize import word_tokenize
+import sqlite3
 
 # soup is the html (but transformed into a python-manipulatable object) 
 # that comes from scraping a website
@@ -30,7 +31,7 @@ def scrape_time_for_kids_links(URL, links_list: set):
 	for link in links:
 		links_list.add(link.find('a').get('href'))
 
-def get_times_articles(txt): # txt is what text file to put the scraped articles in
+def get_times_articles(): # txt is what text file to put the scraped articles in
 	# find the URLs to 600+ Time articles
 	links_list = set() # making list into a set ensures no duplicates
 	for section in ['us', 'politics', 'world', 'health', 'business', 'tech', 'entertainment', 'ideas',\
@@ -53,20 +54,24 @@ def get_times_articles(txt): # txt is what text file to put the scraped articles
 
 	for link in links_list:
 		soup = get_soup_from_URL('https://time.com' + link)
+		print('scraping link', number, link)
 		article_string = ""
 		for paragraph in soup.find_all('p')[:-1]: # omit the last paragraph, which is an email address
 			article_string += paragraph.get_text() + "\n"
 		text_list.add(article_string)
-		print('scraping link', number)
 		number += 1
 
-	# put the text in a text file
-	with open(txt, 'w') as file:
-		for text in text_list:
-			file.write(text+'|||||') # makes it easier to identify separate articles later on
-		file.close()
 
-def get_times_for_kids_articles(txt):
+	# put the text in a database
+	with sqlite3.connect("corpus.sqlite") as con:
+		cur = con.cursor()
+		cur.executemany("""
+		INSERT INTO Training(article_text, difficult)
+		VALUES(?,?)
+		""", list((i, 1) for i in text_list))
+
+
+def get_times_for_kids_articles():
 
 	# find URLs for 600+ webpages
 	links_list = set()
@@ -88,6 +93,7 @@ def get_times_for_kids_articles(txt):
 	for link in links_list:
 		soup = get_soup_from_URL(link)
 		main_body = soup.find('div', class_= 'article-show__content-article')
+		print('scraping link', number, link)
 		article_string = ""
 		for paragraph in main_body.find_all(['p', 'h2']):
 			# finds highlighted words with dictionary definitions, which ruins the layout of the text, and deletes it
@@ -95,14 +101,15 @@ def get_times_for_kids_articles(txt):
 				span.extract()
 			article_string += paragraph.get_text() + "\n"
 		text_list.add(article_string)
-		print(article_string, '\nscraped link', number)
 		number += 1
 	
-	# put the text in a text file
-	with open(txt, 'w') as file:
-		for text in text_list:
-			file.write(text+'|||||') # makes it easier to identify separate articles later on
-		file.close()
+	# put the text in a database
+	with sqlite3.connect("corpus.sqlite") as con:
+		cur = con.cursor()
+		cur.executemany("""
+		INSERT INTO Training(article_text, difficult)
+		VALUES(?,?)
+		""", list((i, 0) for i in text_list))
 	
 def get_global_text_frequency(json):
 	'''
@@ -115,7 +122,8 @@ def get_global_text_frequency(json):
 		pass
 	pass
 
-		
+get_times_articles()
+get_times_for_kids_articles()
 
 
 

@@ -1,3 +1,4 @@
-env
-cc_net 
-news-please
+env/
+cc_net/ 
+news-please/
+__pycache__/
