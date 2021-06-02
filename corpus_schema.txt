@@ -2,3 +2,13 @@ CREATE TABLE Training (
     article_text TEXT UNIQUE,
     difficult BOOLEAN NOT NULL CHECK (difficult IN (0, 1))
 );
+
+CREATE TABLE Repository (
+    article_id INTEGER PRIMARY KEY,
+    article_title TEXT,
+    article_text TEXT UNIQUE,
+    article_url TEXT UNIQUE,
+    date_time_added TEXT,
+    publication_or_publisher_name TEXT,
+    order_number INTEGER
+);

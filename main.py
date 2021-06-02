@@ -2,9 +2,8 @@ import pandas as pd
 import numpy as np
 import random # testing
 import bisect # testing
-
-df = pd.read_csv('all.csv')
-poems = df["content"]
+import svm
+import vectorize as v
 
 '''
 initial sorting algorithm
@@ -35,8 +34,8 @@ def bin_search(text, sorted_texts, k_max):
 	middle = (top + bottom) // 2
 	k = k_max
 	'''
-	for every text in the (as of yet) unsorted list, we try to find the right 
-	position by comparing the given text to a range of texts in unsorted list (ROTIULfor short)
+	for every text in the sorted list, we try to find the right 
+	position by comparing the given text to a range of texts in sorted list (ROTISL for short)
 	between (middle - k, middle + k) rather than a single text
 	'''
 	while top >= bottom:
@@ -45,24 +44,25 @@ def bin_search(text, sorted_texts, k_max):
 		# print(bottom, middle, top, k) # debugging
 		if k > (top - bottom) // 2: 
 			k = (top - bottom) // 2
-		difficult_texts = 0 # i.e. texts in the ROTIUL more difficult than the text drawn from
+		difficult_texts = 0 # i.e. texts in the ROTISL more difficult than the text drawn from
 							# the unsorted list
 		for i in range(middle - k, middle + k + 1):
 			if compare(text, sorted_texts[i]) < 0:
 				difficult_texts += 1
 		# print("difficult_texts:", difficult_texts)
-		if difficult_texts > k: # i.e. majority of texts in ROTIUL more difficult than given text
+		if difficult_texts > k: # i.e. majority of texts in ROTISL more difficult than given text
 			top = middle - 1
 		else:
 			bottom = middle + 1
 		middle = (top + bottom) // 2
 	return bottom
 
-# algorithm by which texts are compared; the comparator
-
+# algorithm by which texts (in the form of strings) are compared; the comparator
 def compare(text1, text2):
+	return svm.predict(v.prepare_for_svm(v.vectorize(text1), v.vectorize(text2),indexed_global_vector))
+	
 	# TEMPORARY COMPARATOR FOR INTS:
-	return text1 - text2
+	# return text1 - text2
 
 	# TEMPORARY COMPARATOR FOR STRS:
     # if (len(text1) > len(text2)):
@@ -86,7 +86,7 @@ def terminal_app():
 		if option == 1:
 			print("Sorry, I'd like to get us started, but we need to finish getting the global log frequency vector first.")
 		if option == 2:
-			print("Sorry, I'd like to find a text with a similar difficulty to your text, but we need to finish getting the global log frequency vector first.")
+			print("Sorry, I'd like to find a text with a similar difficulty to your text, but we need to finish getting the corpus first.")
 		if option == 3:
 			print("Sorry, I'd like to find a text with a similar difficulty to a text in our corpus, but we need to finish getting the corpus in the first place.")
 		if option == 4:

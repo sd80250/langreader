@@ -110,20 +110,9 @@ def get_times_for_kids_articles():
 		INSERT INTO Training(article_text, difficult)
 		VALUES(?,?)
 		""", list((i, 0) for i in text_list))
-	
-def get_global_text_frequency(json):
-	'''
-	txt is the filepath on which the global frequency vector is written
-	There's no way that any computer will have 6 TB of memory on it, so what we should do is have an overall
-	variable that gets updated every time the program reads through another article. The algorithm will need
-	to be optimized for speed so it doesn't take an eternity to compute the statistic.
-	'''
-	with open(txt, 'w') as file:
-		pass
-	pass
 
-get_times_articles()
-get_times_for_kids_articles()
+# get_times_articles()
+# get_times_for_kids_articles()
 
 
 
