@@ -164,6 +164,15 @@ def get_training_vector_indeces(length_A, length_B, n):
         training_vector_indeces.add((value // length_B, value - value // length_B * length_B))
     return training_vector_indeces
 
+def shuffle_training_vector_indeces(length_A, length_B, n):
+    random_values = list(range(length_A*length_B))
+    random.shuffle(random_values)
+    training_vector_indeces = []
+    for value in random_values:
+        training_vector_indeces.append((value // length_B, value - value // length_B * length_B))
+    for i in range(0, len(training_vector_indeces), n):
+        yield training_vector_indeces[i:i+n]
+
 # print(get_training_vector_indeces(7, 5, 10))
 
 # makes the two arrays needed for the svm to train: the first is the word vector itself, the second is the result
@@ -187,24 +196,70 @@ def make_training_data(n):
     print('done')
 
     # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
-    print('forming svm vector:', flush=True)
+    # print('forming svm vector:', flush=True)
     index = 1
-    for a_index, b_index in get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), n):
+    for easy_index, hard_index in get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), n):
         process = psutil.Process(os.getpid())
-        print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
-        svm_vectors_list.append(prepare_for_svm(easy_texts_list[a_index], hard_texts_list[b_index], indexed_global_vector))
+        # print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
+        svm_vectors_list.append(prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
         results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
         # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
-        svm_vectors_list.append(prepare_for_svm(hard_texts_list[b_index], easy_texts_list[a_index], indexed_global_vector))
+        svm_vectors_list.append(prepare_for_svm(hard_texts_list[easy_index], easy_texts_list[hard_index], indexed_global_vector))
         results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
-        print("done")
+        # print("done")
         index += 1
 
-        # print('easy text', easy_texts_list[a_index])
-        # print('hard text', hard_texts_list[b_index])
-    print('done forming svm vector; converting to numpy arrays')
+        # print('easy text', len(easy_texts_list))
+        # print('hard text', len(hard_texts_list))
+    # print('done forming svm vector; now converting to numpy arrays')
 
     return np.asarray(svm_vectors_list), np.asarray(results_list)
+
+def yield_training_data(batch_size_times_two):
+    easy_texts_list = [] 
+    hard_texts_list = []
+
+    # make an indexed_global_vector
+    indexed_global_vector = make_indexed(global_vector())
+
+    # add the vectors to the easy and hard lists
+    print('getting articles... ', end='', flush=True)
+    for article in time_get_str(False):
+        easy_texts_list.append(make_relative(frequency_vector(article[0])))
+    for article in time_get_str(True):
+        hard_texts_list.append(make_relative(frequency_vector(article[0])))
+    print('done')
+    # print('easy text', len(easy_texts_list))
+    # print('hard text', len(hard_texts_list))
+    # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
+    index = 1
+    for batch in shuffle_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), batch_size_times_two):
+
+        # reset svm_vector and result_list
+        svm_vectors_list = []
+        results_list = []
+
+        for easy_index, hard_index in batch:
+            # print('forming a batch of svm vectors:', flush=True)
+
+            # print index and memory usage
+            # process = psutil.Process(os.getpid())
+            # print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
+            
+            # prepares vectors as arrays
+            svm_vectors_list.append(prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
+            results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
+            # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
+            svm_vectors_list.append(prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
+            results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
+            
+            # print("done")
+            index += 1
+        
+        # print('done forming svm vector; now converting to numpy arrays')
+        yield np.array(svm_vectors_list), np.array(results_list)
+        # print('easy text', easy_texts_list[a_index])
+        # print('hard text', hard_texts_list[b_index])
 
 #TESTING
 # i = 0
