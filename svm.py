@@ -119,4 +119,4 @@ def make_and_test_SGD_model(data_per_batch_times_two, n_iters):
         print("done")
 # make_and_test_model(400)
 
-make_and_test_SGD_model(160, 5)
+# make_and_test_SGD_model(160, 5)
