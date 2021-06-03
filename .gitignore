@@ -6,4 +6,4 @@ env/
 cc_net/ 
 news-please/
 __pycache__/
-svm_model.p
+*.p

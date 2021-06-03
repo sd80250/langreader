@@ -6,11 +6,14 @@ import nltk
 import re
 import json
 import math
+import gc
+import pickle
+import os, psutil
 
 def preprocess(text):
     text = text.lower()
-    # replaces em/en dashes with space
-    text = re.sub(r'[–—]', ' ', text)
+    # replaces em/en dashes/horizontal bars with space
+    text = re.sub(r'[–—―]', ' ', text)
     # removes punctuation from the text, except the hyphen, of course
     text = re.sub(r'[^\w\s-]', '', text)
     # tokenizes the string into an array of words
@@ -40,7 +43,10 @@ def make_relative(fv):
         fv[key] = fv[key] / total
     return fv
 
-def global_vector(delete_spurious_values=True):
+def global_vector(): # run make_global_vector first before running global_vector!!!
+    return pickle.load(open("global_vector.p", "rb"))
+
+def make_global_vector(delete_spurious_values=True, min_freq=1): # puts this in a pickle file
     # aadithyaa's function; should return global log frequency of words in English
     print('opening file... ', end='', flush=True)
     with open('fv.txt') as f:
@@ -51,19 +57,22 @@ def global_vector(delete_spurious_values=True):
     js = json.loads(data)
     print('done')
 
-    # deletes em and en dashes ;)
-    del js['\u2013']
-    del js['\u2014']
-
-    if delete_spurious_values: # spurious values defined as words that only appear once in the dataset; cuts vector by a factor of 6
+    if delete_spurious_values: # spurious values defined as words not in words.txt
         print('deleting spurious values... ', end='', flush=True)
-        spurious_words = []
-        for key in js:
-            if js[key] == 1:
-                spurious_words.append(key)
+        spurious_words = set()
 
+        with open('words.txt', 'r') as words:
+            word_string = preprocess(words.read())
+
+        real_words = set(word_string)
+
+        # we have to make two for-loops because you can't delete a key in a dictionary while accessing it
+        for key in js:
+            if (key not in real_words) or (js[key] <= min_freq):
+                spurious_words.add(key)
         for spurious_word in spurious_words:
             del js[spurious_word]
+
         print('done')
     
     print('making values log... ', end='', flush=True)
@@ -71,7 +80,10 @@ def global_vector(delete_spurious_values=True):
         js[key] = math.log(js[key])
     print('done')
 
-    return js
+    # store dictionary onto a binary file using pickle
+    print("dumping dictionary... ", end='', flush=True)
+    pickle.dump(js, open('global_vector.p', 'wb'))
+    print("done")
 
 # this method probably belongs in another file
 # hard: 0/False = the text is not hard, 1/True = the text is hard
@@ -107,13 +119,12 @@ def make_indexed(vector):
 def prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector): # produces a concatenated vector for the SVM
     '''
     text_vector_A and text_vector_B should have relative frequencies; the sum of their terms should be 1.
-    The vector has four parts: A_freq, global_A_freq, B_freq, global_B_freq; each part is one more than the length 
-    of the global vector the last value will indicate the number of times that any word that is not in the global 
-    vector is counted in the local frequency vectors. Refer back to the paper for more info.
+    The vector has four parts: A_freq, global_A_freq, B_freq, global_B_freq; any value that does not appear
+    in the global vector will not be counted. Refer back to the paper for more info.
     value is 1 or -1, where 1 indicates that text_vector_A is more difficult than text_vector_B, and -1 is vice versa
     '''
 
-    no_of_entries = len(indexed_global_vector) + 1 # the last entry will indicate the frequency of any word found not in the global vector
+    no_of_entries = len(indexed_global_vector) 
     svm_vector = [0] * (4 * no_of_entries) # makes a vector of 0's (like this: [0, 0, 0, ...]) with length of 4*no_of_entries
 
     for key, value in text_vector_A.items():
@@ -122,8 +133,8 @@ def prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector): # prod
         if key in indexed_global_vector:
             svm_vector[indexed_global_vector[key][1]] = value
             svm_vector[indexed_global_vector[key][1] + no_of_entries] = indexed_global_vector[key][0] 
-        else:
-            svm_vector[no_of_entries - 1] += value
+        # else:
+        #     svm_vector[no_of_entries - 1] += value
             # print("I have no home (vector A):", key, value)
         
     # do a similar thing with vector B
@@ -131,8 +142,8 @@ def prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector): # prod
         if key in indexed_global_vector:
             svm_vector[indexed_global_vector[key][1] + 2 * no_of_entries] = value
             svm_vector[indexed_global_vector[key][1] + 3 * no_of_entries] = indexed_global_vector[key][0]
-        else:
-            svm_vector[no_of_entries - 1 + 2 * no_of_entries] += value
+        # else:
+        #     svm_vector[no_of_entries - 1 + 2 * no_of_entries] += value
             # print("I have no home (vector B):", key, value)
     return svm_vector
 
@@ -179,7 +190,8 @@ def make_training_data(n):
     print('forming svm vector:', flush=True)
     index = 1
     for a_index, b_index in get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), n):
-        print("adding n =", index, "... ", end="", flush=True)
+        process = psutil.Process(os.getpid())
+        print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
         svm_vectors_list.append(prepare_for_svm(easy_texts_list[a_index], hard_texts_list[b_index], indexed_global_vector))
         results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
         # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
@@ -190,9 +202,8 @@ def make_training_data(n):
 
         # print('easy text', easy_texts_list[a_index])
         # print('hard text', hard_texts_list[b_index])
-    print('done forming svm vector')
+    print('done forming svm vector; converting to numpy arrays')
 
-    
     return np.asarray(svm_vectors_list), np.asarray(results_list)
 
 #TESTING
@@ -263,3 +274,47 @@ def make_training_data(n):
 # for n in range(0,4):
 #     print("for index 1,", no_of_entries - 1, "; n =", n, ":", X[1, no_of_entries - 1 + n * no_of_entries])
 
+# test for number of occurences per key
+# print('opening file... ', end='', flush=True)
+# with open('fv.txt') as f:
+#     data = f.read()
+# print('done')
+
+# print('loading data... ', end='', flush=True)
+# js = json.loads(data)
+# print('done')
+
+# frequency_count = {}
+# for value in js.values():
+#     if value not in frequency_count:
+#         frequency_count[value] = 1
+#     else:
+#         frequency_count[value] += 1
+
+# print(frequency_count)
+
+# while True:
+#     print(frequency_count.get(int(input())))
+
+# frequency_count = {}
+# for value in gv.values():
+#     if value not in frequency_count:
+#         frequency_count[value] = 1
+#     else:
+#         frequency_count[value] += 1
+
+# print(frequency_count)
+
+# while True:
+#     min_freq = float(input())
+#     out = 0
+#     for count in frequency_count:
+#         if count >= min_freq:
+#             out += frequency_count[count]
+#     print(out)
+
+# while True:
+#     min_freq = float(input())
+#     for word, value in gv.items():
+#         if value >= min_freq:
+#             print(word)

@@ -10,6 +10,7 @@ from sklearn.svm import SVC
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 import pickle
+import os, psutil
 
 def make_and_test_model(amount_of_test_data_times_two):
     # get training data
@@ -44,7 +45,9 @@ def train_on_kernel(kern, X_train, X_test, y_train, y_test, degree=8):
     
     print("fitting svm... ", end = "", flush=True)
     svclassifier.fit(X_train, y_train)
-    print("done")
+    
+    process = psutil.Process(os.getpid())
+    print("done; used", process.memory_info().rss // 1000000, "MB memory")
 
     print("predicting svm... ", end = "", flush=True)
     y_pred = svclassifier.predict(X_test)
@@ -55,4 +58,4 @@ def train_on_kernel(kern, X_train, X_test, y_train, y_test, degree=8):
     print("classification report\n", classification_report(y_test, y_pred))
     return svclassifier
 
-make_and_test_model(30)
+make_and_test_model(400)
