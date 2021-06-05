@@ -60,11 +60,13 @@ def make_global_vector(delete_spurious_values=True, min_freq=1): # puts this in 
     if delete_spurious_values: # spurious values defined as words not in words.txt
         print('deleting spurious values... ', end='', flush=True)
         spurious_words = set()
+        real_words = set()
 
-        with open('words.txt', 'r') as words:
-            word_string = preprocess(words.read())
+        for article in time_get_str(False):
+            real_words.update(preprocess(article[0]))
 
-        real_words = set(word_string)
+        for article in time_get_str(True):
+            real_words.update(preprocess(article[0]))
 
         # we have to make two for-loops because you can't delete a key in a dictionary while accessing it
         for key in js:
@@ -75,9 +77,11 @@ def make_global_vector(delete_spurious_values=True, min_freq=1): # puts this in 
 
         print('done')
     
-    print('making values log... ', end='', flush=True)
+    print('making values log and fitting to training scale... ', end='', flush=True)
     for key in js:
-        js[key] = math.log(js[key])
+        # scale the global vector to values closer to the values of input data; 0.07 is the avg. relative freq of the word 'the', while 18.03 is the log freq of the word 'the'
+        # all dictionary values should lie between 0 and 0.07, about the same range as the relative frequencies of texts
+        js[key] = (math.log(js[key]) - math.log(min_freq-.5))*0.07/(18.03 - math.log(min_freq-.5)) 
     print('done')
 
     # store dictionary onto a binary file using pickle
@@ -158,10 +162,18 @@ def prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector): # prod
 # n is the number of pairs that we would like
 # the output is guaranteed no duplicate pairs thanks to the random.sample method
 def get_training_vector_indeces(length_A, length_B, n):
-    random_values = random.sample(range(length_A*length_B), n)
+    # random_values = random.sample(range(length_A*length_B), n)
+    # training_vector_indeces = set()
+    # for value in random_values:
+    #     training_vector_indeces.add((value // length_B, value - value // length_B * length_B))
+    # return training_vector_indeces
+
+    # how the paper implemented it
+    random_values_A = random.sample(range(length_A), n)
+    random_values_B = random.sample(range(length_B), n)
     training_vector_indeces = set()
-    for value in random_values:
-        training_vector_indeces.add((value // length_B, value - value // length_B * length_B))
+    for i in range(0, n):
+        training_vector_indeces.add((random_values_A[i], random_values_B[i]))
     return training_vector_indeces
 
 def shuffle_training_vector_indeces(length_A, length_B, n):
@@ -204,7 +216,7 @@ def make_training_data(n):
         svm_vectors_list.append(prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
         results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
         # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
-        svm_vectors_list.append(prepare_for_svm(hard_texts_list[easy_index], easy_texts_list[hard_index], indexed_global_vector))
+        svm_vectors_list.append(prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
         results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
         # print("done")
         index += 1

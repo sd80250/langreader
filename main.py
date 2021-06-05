@@ -4,6 +4,7 @@ import random # testing
 import bisect # testing
 import svm
 import vectorize as v
+import pickle
 
 '''
 initial sorting algorithm
@@ -14,6 +15,8 @@ list of length 10
 k_max: 2*k_max + 1 = the maximum number of texts the algorithm will compare texts to every pass; it
 should probably be 2 or more
 '''
+global sgd_model 
+global indexed_global_vector 
 
 def init_sort(texts, k_max):
 	sorted_texts = []
@@ -22,11 +25,12 @@ def init_sort(texts, k_max):
 	return sorted_texts
 
 def insert(text, sorted_texts, k_max):
+	print(len(sorted_texts))
 	if len(sorted_texts) == 0:
 		sorted_texts.append(text)
 		return
 	# print(bottom, middle, top, k) # debugging
-	sorted_texts.insert(bin_search(text, sorted_texts, k_max), text)
+	sorted_texts.insert(bin_search(text[0], [j[0] for j in sorted_texts], k_max), text) # TODO: switch text[0] and [j[0]...] back text and sorted_texts
 
 def bin_search(text, sorted_texts, k_max):
 	bottom = 0
@@ -58,8 +62,16 @@ def bin_search(text, sorted_texts, k_max):
 	return bottom
 
 # algorithm by which texts (in the form of strings) are compared; the comparator
-def compare(text1, text2):
-	return svm.predict(v.prepare_for_svm(v.vectorize(text1), v.vectorize(text2),indexed_global_vector))
+def compare(text1, text2, print_=False):
+	text1_fv = v.make_relative(v.frequency_vector(text1))
+	text2_fv = v.make_relative(v.frequency_vector(text2))
+	if print_:
+		for key, value in text1_fv.items():
+			print(key, value, indexed_global_vector.get(key, ("NONE",))[0])
+		print()
+		for key, value in text2_fv.items():
+			print(key, value, indexed_global_vector.get(key, ("NONE",))[0])
+	return sgd_model.predict(np.asarray(v.prepare_for_svm(text1_fv, text2_fv,indexed_global_vector)).reshape((1, -1)))
 	
 	# TEMPORARY COMPARATOR FOR INTS:
 	# return text1 - text2
@@ -70,93 +82,102 @@ def compare(text1, text2):
     # else:
     # 	return -1
 
-def terminal_app():
-	options_str = """
-	1: Get Started
-	2: Find text with similar difficulty to my text
-	3: Find text with similar difficulty to a text in the corpus
-	4: Search corpus
-	"""
-	print("""
-	Welcome to the Big Fat Proto-Prototype Repository of Texts!
-	Find a text that's right for you by typing the number corresponding to the options below.
-	""" + options_str)
+def test():
+	sgd_model = svm.load_model('svm_model563.p')
+	indexed_global_vector = v.make_indexed(v.global_vector())
+
+	# poems = pd.DataFrame(pd.read_csv('PoetryFoundationData.csv'), columns=['Poem', 'Title'])
+	# poem_list = list(poems.to_records(index=False))[0:100]
+	# print(len(poem_list))
+	# sorted_list = init_sort(poem_list, 2)
+	# sgd_sorted_poems = pickle.load(open('sorted_poems.p', 'rb'))
+	# pickle.dump(sorted_list, open('svm563_poems.p', 'wb'))
+
+
+
+	# poem_list = [(y[0], 'Hard') for y in v.time_get_str(True)[0:50]] + [(y[0], 'Easy') for y in v.time_get_str(False)[0:50]]
+
+	sorted_list = pickle.load(open('svm563_poems.p', 'rb'))
+	sgd_sorted_poems = pickle.load(open('sorted_poems.p', 'rb'))
+	# sorted_list = init_sort(poem_list, 2)
+	index = 0
+	for i, j in zip(sorted_list, sgd_sorted_poems):
+		print('{0} {1:50} {2}'.format(index, j[1].strip(), len(v.preprocess(j[0]))))
+		index += 1
+	# pickle.dump(sorted_list, open('sorted_articles.p', 'wb'))
+
+
 	while True:
-		option = int(input())
-		if option == 1:
-			print("Sorry, I'd like to get us started, but we need to finish getting the global log frequency vector first.")
-		if option == 2:
-			print("Sorry, I'd like to find a text with a similar difficulty to your text, but we need to finish getting the corpus first.")
-		if option == 3:
-			print("Sorry, I'd like to find a text with a similar difficulty to a text in our corpus, but we need to finish getting the corpus in the first place.")
-		if option == 4:
-			print("Sorry, I'd like to let you search our non-existent corpus, but I've been informed that that's metaphysically impossible.")
-		print("Is there anything else I can help you with?\n" + options_str)
+		try:
+			print('enter input: ', end='', flush=True)
+			index = int(input())
+			print(sgd_sorted_poems[index][0].strip())
+		except Exception as e:
+			print(e)
 
-terminal_app()
-# TESTS
-# ---------------
+	# TESTS
+	# ---------------
 
-# SINGLE LIST TEST:
-# testing
-# test_int_list = [1,1,2,3,5,8,13,21,34,55]
-# random.seed(0)
-# random.shuffle(test_int_list)
-# print("initially sort the texts:")
-# print("initial list:", test_int_list)
-# print(init_sort(test_int_list, 3)) 
-# print(init_sort(poems, 3))
+	# SINGLE LIST TEST:
+	# testing
+	# test_int_list = [1,1,2,3,5,8,13,21,34,55]
+	# random.seed(0)
+	# random.shuffle(test_int_list)
+	# print("initially sort the texts:")
+	# print("initial list:", test_int_list)
+	# print(init_sort(test_int_list, 3)) 
+	# print(init_sort(poems, 3))
 
 
-# # 100 RANDOM TESTS INITIAL LIST TEST:
-# print("running 100 random tests:")
-# for i in range(0, 100):
-# 	# make a random list of 1 - 20 integers with values between 0 and 100
-# 	random_list = random.sample(range(0, 100), random.randint(1, 20))
-# 	print("initial list:", random_list)
-# 	# list that's sorted by our algorithm with random k value between 3 and 10
-# 	init_sorted = init_sort(random_list, random.randint(3, 10))
-# 	print("list sorted by init_sort:", init_sorted)
-# 	# list sorted by python algorithm
-# 	python_sorted = sorted(random_list)
-# 	print("list sorted by python:", python_sorted)
-# 	# checks if two sorted lists equal
-# 	for i in range(0, len(random_list)):
-# 		if (init_sorted[i] != python_sorted[i]):
-# 			print("INIT_SORTED NOT EQUAL TO PYTHON_SORTED")
-# 			quit()
-# 	print("init_sorted == python_sorted")
+	# # 100 RANDOM TESTS INITIAL LIST TEST:
+	# print("running 100 random tests:")
+	# for i in range(0, 100):
+	# 	# make a random list of 1 - 20 integers with values between 0 and 100
+	# 	random_list = random.sample(range(0, 100), random.randint(1, 20))
+	# 	print("initial list:", random_list)
+	# 	# list that's sorted by our algorithm with random k value between 3 and 10
+	# 	init_sorted = init_sort(random_list, random.randint(3, 10))
+	# 	print("list sorted by init_sort:", init_sorted)
+	# 	# list sorted by python algorithm
+	# 	python_sorted = sorted(random_list)
+	# 	print("list sorted by python:", python_sorted)
+	# 	# checks if two sorted lists equal
+	# 	for i in range(0, len(random_list)):
+	# 		if (init_sorted[i] != python_sorted[i]):
+	# 			print("INIT_SORTED NOT EQUAL TO PYTHON_SORTED")
+	# 			quit()
+	# 	print("init_sorted == python_sorted")
 
 
-# 100 RANDOM TESTS INSERT VALUE TEST:
-# print("running 100 random tests:")
-# for i in range(0, 100):
-# 	# make a random, sorted list of 1 - 20 integers with values between 0 and 100
-# 	random_sorted_list = sorted(random.sample(range(0, 100), random.randint(1, 20)))
-# 	print("initial list:", random_sorted_list)
-# 	# make a random integer between 0 and 100
-# 	random_int = random.randint(0, 100)
-# 	print("initial integer:", random_int)
-# 	# insert that integer with random k value between 3 and 10 using our algorithm
-# 	inserted_list = random_sorted_list[:] # makes a copy of random_sorted_list
-# 	insert(random_int, inserted_list, random.randint(3, 10))
-# 	print("list with integer inserted by algorithm:", inserted_list)
-# 	# insert integer with python's bisect algorithm
-# 	bisected_list = random_sorted_list[:]
-# 	bisect.insort(bisected_list, random_int)
-# 	print("list with integer inserted by bisect:", bisected_list)
-# 	# checks if two sorted lists equal
-# 	for i in range(0, len(random_sorted_list)):
-# 		if (inserted_list[i] != bisected_list[i]):
-# 			print("INESRTED_LIST NOT EQUAL TO BISECTED_LIST")
-# 			quit()
-# 	print("inserted_list == bisected_list")
+	# 100 RANDOM TESTS INSERT VALUE TEST:
+	# print("running 100 random tests:")
+	# for i in range(0, 100):
+	# 	# make a random, sorted list of 1 - 20 integers with values between 0 and 100
+	# 	random_sorted_list = sorted(random.sample(range(0, 100), random.randint(1, 20)))
+	# 	print("initial list:", random_sorted_list)
+	# 	# make a random integer between 0 and 100
+	# 	random_int = random.randint(0, 100)
+	# 	print("initial integer:", random_int)
+	# 	# insert that integer with random k value between 3 and 10 using our algorithm
+	# 	inserted_list = random_sorted_list[:] # makes a copy of random_sorted_list
+	# 	insert(random_int, inserted_list, random.randint(3, 10))
+	# 	print("list with integer inserted by algorithm:", inserted_list)
+	# 	# insert integer with python's bisect algorithm
+	# 	bisected_list = random_sorted_list[:]
+	# 	bisect.insort(bisected_list, random_int)
+	# 	print("list with integer inserted by bisect:", bisected_list)
+	# 	# checks if two sorted lists equal
+	# 	for i in range(0, len(random_sorted_list)):
+	# 		if (inserted_list[i] != bisected_list[i]):
+	# 			print("INESRTED_LIST NOT EQUAL TO BISECTED_LIST")
+	# 			quit()
+	# 	print("inserted_list == bisected_list")
 
 
 
-# TESTING 100 RANDOM binary search integers
-# test = [0,1,2,3,4,5,6,7, 8,9,10]
-# num = 8
-# print(insert(num, test, 2))
-# print(test)
-# print(bin_search(num, test, 2))
+	# TESTING 100 RANDOM binary search integers
+	# test = [0,1,2,3,4,5,6,7, 8,9,10]
+	# num = 8
+	# print(insert(num, test, 2))
+	# print(test)
+	# print(bin_search(num, test, 2))
