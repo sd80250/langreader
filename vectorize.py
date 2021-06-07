@@ -9,13 +9,14 @@ import math
 import gc
 import pickle
 import os, psutil
+from abc import ABC, abstractmethod
 
 def preprocess(text):
     text = text.lower()
-    # replaces em/en dashes/horizontal bars with space
-    text = re.sub(r'[–—―]', ' ', text)
-    # removes punctuation from the text, except the hyphen, of course
-    text = re.sub(r'[^\w\s-]', '', text)
+    # replaces hyphens, em/en dashes, and horizontal bars with space
+    text = re.sub(r'[-–—―]', ' ', text)
+    # removes punctuation and numerals from the text
+    text = re.sub(r'[^\w\s]|[0-9]', '', text)
     # tokenizes the string into an array of words
     text = nltk.word_tokenize(text)
     return text
@@ -44,12 +45,52 @@ def make_relative(fv):
     return fv
 
 def global_vector(): # run make_global_vector first before running global_vector!!!
-    return pickle.load(open("global_vector.p", "rb"))
+    return pickle.load(open("models/global_vector.p", "rb"))
+
+def fix_fv():
+    print('opening file... ', end='', flush=True)
+    with open('fv.txt') as f:
+        data = f.read()
+    print('done')
+
+    print('loading data... ', end='', flush=True)
+    js_dict = json.loads(data)
+    js_len = len(js_dict)
+    print('done')
+
+    print('updating dictionary... ', end='\r', flush=True)
+    new_words = {}
+    words_to_delete = set()
+    index = 0
+    for key in js_dict:
+        index += 1
+        print('updating dictionary... ' + str(index) + '/' + str(js_len) + " new words: " + str(len(new_words)) + " words to delete: " + str(len(words_to_delete)), end='\r', flush=True)
+        fixed = preprocess(key)
+        if len(fixed) == 1 and fixed[0] == key:
+            continue
+        else:
+            for new_word in fixed:
+                if new_word not in js_dict:
+                    new_words[new_word] = js_dict[key]
+                else:
+                    js_dict[new_word] += js_dict[key]
+            words_to_delete.add(key)
+
+    for word in words_to_delete:
+        del js_dict[word]        
+    js_dict.update(new_words)
+    print('updating dictionary... done')
+
+    print('writing to file... ', end='', flush=True)
+    with open('fv_updated.txt', 'w') as f:
+        f.write(json.dumps(js_dict))
+    print('done')
+
 
 def make_global_vector(delete_spurious_values=True, min_freq=1): # puts this in a pickle file
     # aadithyaa's function; should return global log frequency of words in English
     print('opening file... ', end='', flush=True)
-    with open('fv.txt') as f:
+    with open('fv_updated.txt') as f:
         data = f.read()
     print('done')
 
@@ -86,7 +127,7 @@ def make_global_vector(delete_spurious_values=True, min_freq=1): # puts this in 
 
     # store dictionary onto a binary file using pickle
     print("dumping dictionary... ", end='', flush=True)
-    pickle.dump(js, open('global_vector.p', 'wb'))
+    pickle.dump(js, open('models/global_vector.p', 'wb'))
     print("done")
 
 # this method probably belongs in another file
@@ -120,158 +161,225 @@ def make_indexed(vector):
 
     return vector
 
-def prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector): # produces a concatenated vector for the SVM
-    '''
-    text_vector_A and text_vector_B should have relative frequencies; the sum of their terms should be 1.
-    The vector has four parts: A_freq, global_A_freq, B_freq, global_B_freq; any value that does not appear
-    in the global vector will not be counted. Refer back to the paper for more info.
-    value is 1 or -1, where 1 indicates that text_vector_A is more difficult than text_vector_B, and -1 is vice versa
-    '''
+class Vectorizer(ABC):
+    @abstractmethod
+    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector):
+        pass
+    
+    @abstractmethod
+    def get_training_vector_indeces(self, length_A, length_B, n):
+        pass
+    
+    @abstractmethod
+    def make_training_data(self, n):
+        pass
 
-    no_of_entries = len(indexed_global_vector) 
-    svm_vector = [0] * (4 * no_of_entries) # makes a vector of 0's (like this: [0, 0, 0, ...]) with length of 4*no_of_entries
+class ConcatenationVectorizer(Vectorizer):
+    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector): # produces a concatenated vector for the SVM
+        '''
+        text_vector_A and text_vector_B should have relative frequencies; the sum of their terms should be 1.
+        The vector has four parts: A_freq, global_A_freq, B_freq, global_B_freq; any value that does not appear
+        in the global vector will not be counted. Refer back to the paper for more info.
+        value is 1 or -1, where 1 indicates that text_vector_A is more difficult than text_vector_B, and -1 is vice versa
+        '''
 
-    for key, value in text_vector_A.items():
-        # if the key of vector A can be found in the global vector, then add those values to the svm vector
-        # otherwise, sum the value with the last entry of the A part of the svm vector
-        if key in indexed_global_vector:
-            svm_vector[indexed_global_vector[key][1]] = value
-            svm_vector[indexed_global_vector[key][1] + no_of_entries] = indexed_global_vector[key][0] 
-        # else:
-        #     svm_vector[no_of_entries - 1] += value
-            # print("I have no home (vector A):", key, value)
+        no_of_entries = len(indexed_global_vector) 
+        svm_vector = [0] * (4 * no_of_entries) # makes a vector of 0's (like this: [0, 0, 0, ...]) with length of 4*no_of_entries
+
+        for key, value in text_vector_A.items():
+            # if the key of vector A can be found in the global vector, then add those values to the svm vector
+            # otherwise, sum the value with the last entry of the A part of the svm vector
+            if key in indexed_global_vector:
+                svm_vector[indexed_global_vector[key][1]] = value
+                svm_vector[indexed_global_vector[key][1] + no_of_entries] = indexed_global_vector[key][0] 
+            # else:
+            #     svm_vector[no_of_entries - 1] += value
+                # print("I have no home (vector A):", key, value)
+            
+        # do a similar thing with vector B
+        for key, value in text_vector_B.items():
+            if key in indexed_global_vector:
+                svm_vector[indexed_global_vector[key][1] + 2 * no_of_entries] = value
+                svm_vector[indexed_global_vector[key][1] + 3 * no_of_entries] = indexed_global_vector[key][0]
+            # else:
+            #     svm_vector[no_of_entries - 1 + 2 * no_of_entries] += value
+                # print("I have no home (vector B):", key, value)
+        return svm_vector
+    
+class SubtractionVectorizer(Vectorizer):
+    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector): # produces SVM vector that's subtracted
+        no_of_entries = len(indexed_global_vector) 
+        svm_vector = [0] * (2 * no_of_entries)
+
+        for key, value in text_vector_A.items():
+            if key in indexed_global_vector:
+                svm_vector[indexed_global_vector[key][1]] = value
+                svm_vector[indexed_global_vector[key][1] + no_of_entries] = indexed_global_vector[key][0]
         
-    # do a similar thing with vector B
-    for key, value in text_vector_B.items():
-        if key in indexed_global_vector:
-            svm_vector[indexed_global_vector[key][1] + 2 * no_of_entries] = value
-            svm_vector[indexed_global_vector[key][1] + 3 * no_of_entries] = indexed_global_vector[key][0]
-        # else:
-        #     svm_vector[no_of_entries - 1 + 2 * no_of_entries] += value
-            # print("I have no home (vector B):", key, value)
-    return svm_vector
+        # subtracts rather than concatenates vector B
+        for key, value in text_vector_B.items():
+            if key in indexed_global_vector:
+                svm_vector[indexed_global_vector[key][1]] -= value
+                svm_vector[indexed_global_vector[key][1] + no_of_entries] -= indexed_global_vector[key][0]
+        
+        return svm_vector
 
-# basic test for svm:
-# indexed_global_vector = make_indexed(global_vector())
-# print("indexed global vector:", indexed_global_vector)
-# print("vector a:", frequency_vector('a'))
-# print("vector b:", frequency_vector('b'))
-# print("resulting svm vector:", prepare_for_svm(frequency_vector("a"), frequency_vector("b"), indexed_global_vector))
+class SVMVectorizer(Vectorizer):
+    # randomly pairs up the indeces of the values in vector A with the indeces of the values in vector B
+    # n is the number of pairs that we would like
+    # the output is guaranteed no duplicate pairs thanks to the random.sample method
+    def get_training_vector_indeces(self, length_A, length_B, n):
+        # random_values = random.sample(range(length_A*length_B), n)
+        # training_vector_indeces = set()
+        # for value in random_values:
+        #     training_vector_indeces.add((value // length_B, value - value // length_B * length_B))
+        # return training_vector_indeces
 
-# randomly pairs up the indeces of the values in vector A with the indeces of the values in vector B
-# n is the number of pairs that we would like
-# the output is guaranteed no duplicate pairs thanks to the random.sample method
-def get_training_vector_indeces(length_A, length_B, n):
-    # random_values = random.sample(range(length_A*length_B), n)
-    # training_vector_indeces = set()
-    # for value in random_values:
-    #     training_vector_indeces.add((value // length_B, value - value // length_B * length_B))
-    # return training_vector_indeces
-
-    # how the paper implemented it
-    random_values_A = random.sample(range(length_A), n)
-    random_values_B = random.sample(range(length_B), n)
-    training_vector_indeces = set()
-    for i in range(0, n):
-        training_vector_indeces.add((random_values_A[i], random_values_B[i]))
-    return training_vector_indeces
-
-def shuffle_training_vector_indeces(length_A, length_B, n):
-    random_values = list(range(length_A*length_B))
-    random.shuffle(random_values)
-    training_vector_indeces = []
-    for value in random_values:
-        training_vector_indeces.append((value // length_B, value - value // length_B * length_B))
-    for i in range(0, len(training_vector_indeces), n):
-        yield training_vector_indeces[i:i+n]
-
-# print(get_training_vector_indeces(7, 5, 10))
-
-# makes the two arrays needed for the svm to train: the first is the word vector itself, the second is the result
-# expected from the vector; each will be length 2n
-def make_training_data(n):
-    # putting everything in lists works because the training data is relatively small
-    easy_texts_list = [] 
-    hard_texts_list = []
-    svm_vectors_list = []
-    results_list = []
-
-    # make an indexed_global_vector
-    indexed_global_vector = make_indexed(global_vector())
-
-    # add the vectors to the easy and hard lists
-    print('getting articles... ', end='', flush=True)
-    for article in time_get_str(False):
-        easy_texts_list.append(make_relative(frequency_vector(article[0])))
-    for article in time_get_str(True):
-        hard_texts_list.append(make_relative(frequency_vector(article[0])))
-    print('done')
-
-    # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
-    # print('forming svm vector:', flush=True)
-    index = 1
-    for easy_index, hard_index in get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), n):
-        process = psutil.Process(os.getpid())
-        # print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
-        svm_vectors_list.append(prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
-        results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
-        # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
-        svm_vectors_list.append(prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
-        results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
-        # print("done")
-        index += 1
-
-        # print('easy text', len(easy_texts_list))
-        # print('hard text', len(hard_texts_list))
-    # print('done forming svm vector; now converting to numpy arrays')
-
-    return np.asarray(svm_vectors_list), np.asarray(results_list)
-
-def yield_training_data(batch_size_times_two):
-    easy_texts_list = [] 
-    hard_texts_list = []
-
-    # make an indexed_global_vector
-    indexed_global_vector = make_indexed(global_vector())
-
-    # add the vectors to the easy and hard lists
-    print('getting articles... ', end='', flush=True)
-    for article in time_get_str(False):
-        easy_texts_list.append(make_relative(frequency_vector(article[0])))
-    for article in time_get_str(True):
-        hard_texts_list.append(make_relative(frequency_vector(article[0])))
-    print('done')
-    # print('easy text', len(easy_texts_list))
-    # print('hard text', len(hard_texts_list))
-    # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
-    index = 1
-    for batch in shuffle_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), batch_size_times_two):
-
-        # reset svm_vector and result_list
+        # how the paper implemented it
+        random_values_A = random.sample(range(length_A), n)
+        random_values_B = random.sample(range(length_B), n)
+        training_vector_indeces = set()
+        for i in range(0, n):
+            training_vector_indeces.add((random_values_A[i], random_values_B[i]))
+        return training_vector_indeces
+    
+    # makes the two arrays needed for the svm to train: the first is the word vector itself, the second is the result
+    # expected from the vector; each will be length 2n
+    def make_training_data(self, n):
+        # putting everything in lists works because the training data is relatively small
+        easy_texts_list = [] 
+        hard_texts_list = []
         svm_vectors_list = []
         results_list = []
 
-        for easy_index, hard_index in batch:
-            # print('forming a batch of svm vectors:', flush=True)
+        # make an indexed_global_vector
+        indexed_global_vector = make_indexed(global_vector())
 
-            # print index and memory usage
-            # process = psutil.Process(os.getpid())
+        # add the vectors to the easy and hard lists
+        print('getting articles... ', end='', flush=True)
+        for article in time_get_str(False):
+            easy_texts_list.append(make_relative(frequency_vector(article[0])))
+        for article in time_get_str(True):
+            hard_texts_list.append(make_relative(frequency_vector(article[0])))
+        print('done')
+
+        # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
+        # print('forming svm vector:', flush=True)
+        index = 1
+        for easy_index, hard_index in self.get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), n):
+            process = psutil.Process(os.getpid())
             # print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
-            
-            # prepares vectors as arrays
-            svm_vectors_list.append(prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
+            svm_vectors_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
             results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
             # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
-            svm_vectors_list.append(prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
+            svm_vectors_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
             results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
-            
             # print("done")
             index += 1
-        
+
+            # print('easy text', len(easy_texts_list))
+            # print('hard text', len(hard_texts_list))
         # print('done forming svm vector; now converting to numpy arrays')
-        yield np.array(svm_vectors_list), np.array(results_list)
-        # print('easy text', easy_texts_list[a_index])
-        # print('hard text', hard_texts_list[b_index])
+
+        return np.asarray(svm_vectors_list), np.asarray(results_list)
+
+class SGDVectorizer(Vectorizer):
+    def get_training_vector_indeces(self, length_A, length_B, n):
+        random_values = list(range(length_A*length_B))
+        random.shuffle(random_values)
+        training_vector_indeces = []
+        for value in random_values:
+            training_vector_indeces.append((value // length_B, value - value // length_B * length_B))
+        for i in range(0, len(training_vector_indeces), n):
+            yield training_vector_indeces[i:i+n]
+    
+    def make_training_data(self, batch_size_times_two):
+        easy_texts_list = [] 
+        hard_texts_list = []
+
+        # make an indexed_global_vector
+        indexed_global_vector = make_indexed(global_vector())
+
+        # add the vectors to the easy and hard lists
+        print('getting articles... ', end='', flush=True)
+        for article in time_get_str(False):
+            easy_texts_list.append(make_relative(frequency_vector(article[0])))
+        for article in time_get_str(True):
+            hard_texts_list.append(make_relative(frequency_vector(article[0])))
+        print('done')
+        # print('easy text', len(easy_texts_list))
+        # print('hard text', len(hard_texts_list))
+        # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
+        index = 1
+        for batch in self.get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), batch_size_times_two):
+
+            # reset svm_vector and result_list
+            svm_vectors_list = []
+            results_list = []
+
+            for easy_index, hard_index in batch:
+                # print('forming a batch of svm vectors:', flush=True)
+
+                # print index and memory usage
+                # process = psutil.Process(os.getpid())
+                # print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
+                
+                # prepares vectors as arrays
+                svm_vectors_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
+                results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
+                # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
+                svm_vectors_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
+                results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
+                
+                # print("done")
+                index += 1
+            
+            # print('done forming svm vector; now converting to numpy arrays')
+            yield np.array(svm_vectors_list), np.array(results_list)
+
+
+class SVMConcatenationVectorizer(ConcatenationVectorizer, SVMVectorizer): # multiple inheritance!!!!
+    # gets from ConcatenationVectorizer
+    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector):
+        return super().prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector)
+    
+    # gets from SVMVectorizer
+    def get_training_vector_indeces(self, length_A, length_B, n):
+        return super().get_training_vector_indeces(length_A, length_B, n)
+    
+    # gets from SVMVectorizer
+    def make_training_data(self, n):
+        return super().make_training_data(n)
+
+class SGDConcatenationVectorizer(ConcatenationVectorizer, SGDVectorizer):
+    # gets from ConcatenationVectorizer
+    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector):
+        return super().prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector)
+    
+    # gets from SGDVectorizer
+    def get_training_vector_indeces(self, length_A, length_B, n):
+        return super().get_training_vector_indeces(length_A, length_B, n)
+    
+    # gets from SGDVectorizer
+    def make_training_data(self, n):
+        return super().make_training_data(n)
+
+class SVMSubtractionVectorizer(SubtractionVectorizer, SVMVectorizer):
+    # gets from SubtractionVectorizer
+    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector):
+        return super().prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector)
+    
+    # gets from SVMVectorizer
+    def get_training_vector_indeces(self, length_A, length_B, n):
+        return super().get_training_vector_indeces(length_A, length_B, n)
+    
+    # gets from SVMVectorizer
+    def make_training_data(self, n):
+        return super().make_training_data(n)
+
+# svm = SVMSubtractionVectorizer()
+# a, b = svm.make_training_data(10)
+# print(a, b)
 
 #TESTING
 # i = 0

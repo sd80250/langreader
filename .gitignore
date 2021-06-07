@@ -6,4 +6,5 @@ env/
 cc_net/ 
 news-please/
 __pycache__/
+models/
 *.p

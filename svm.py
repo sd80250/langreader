@@ -5,7 +5,7 @@ import nltk
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import vectorize
+from vectorize import SVMConcatenationVectorizer, SVMSubtractionVectorizer
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
@@ -14,10 +14,11 @@ import pickle
 import os, psutil
 import time
 
-def make_and_test_model(amount_of_test_data_times_two):
+def make_and_test_model(pairs_of_test_data):
     # get training data
     print("making training data:", flush=True)
-    X, y = vectorize.make_training_data(amount_of_test_data_times_two)
+    vectorizer = SVMSubtractionVectorizer()
+    X, y = vectorizer.make_training_data(pairs_of_test_data)
     print("done making training data")
 
     # split data into training and test data
@@ -32,7 +33,7 @@ def make_and_test_model(amount_of_test_data_times_two):
 
     # store svm onto a binary file using pickle
     print("dumping svm... ", end='', flush=True)
-    pickle.dump(svm, open('svm_model' + str(amount_of_test_data_times_two) + '.p', 'wb'))
+    pickle.dump(svm, open('models/svm_model' + str(pairs_of_test_data) + '.p', 'wb'))
     print("done")
 
     # train_on_kernel('poly', X_train, X_test, y_train, y_test)
@@ -125,12 +126,12 @@ def make_and_test_SGD_model(data_per_batch_times_two, n_iters):
             print()
         
         print("training done, writing to file... ", end="", flush=True)
-        pickle.dump(clf, open('sgd_model_fast.p', 'wb'))
+        pickle.dump(clf, open('models/sgd_model_fast.p', 'wb'))
         print("done")
     except Exception as e:
         print(e)
         print("interrupted, writing to file... ", end="", flush=True)
-        pickle.dump(clf, open('sgd_model_interrupted.p', 'wb'))
+        pickle.dump(clf, open('models/sgd_model_interrupted.p', 'wb'))
         print("done")
 
 def load_model(file_path):
