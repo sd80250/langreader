@@ -44,8 +44,8 @@ def make_relative(fv):
         fv[key] = fv[key] / total
     return fv
 
-def global_vector(): # run make_global_vector first before running global_vector!!!
-    return pickle.load(open("models/global_vector.p", "rb"))
+def global_vector(file_path="models/global_vector.p"): # run make_global_vector first before running global_vector!!!
+    return pickle.load(open(file_path, "rb"))
 
 def fix_fv():
     print('opening file... ', end='', flush=True)
@@ -87,10 +87,10 @@ def fix_fv():
     print('done')
 
 
-def make_global_vector(delete_spurious_values=True, min_freq=1): # puts this in a pickle file
+def make_global_vector(delete_spurious_values=True, min_freq=1, dict_list_file_path='fv_updated.txt', result_file_path="models/global_vector.p"): # puts this in a pickle file
     # aadithyaa's function; should return global log frequency of words in English
     print('opening file... ', end='', flush=True)
-    with open('fv_updated.txt') as f:
+    with open(dict_list_file_path) as f:
         data = f.read()
     print('done')
 
@@ -127,13 +127,13 @@ def make_global_vector(delete_spurious_values=True, min_freq=1): # puts this in 
 
     # store dictionary onto a binary file using pickle
     print("dumping dictionary... ", end='', flush=True)
-    pickle.dump(js, open('models/global_vector.p', 'wb'))
+    pickle.dump(js, open(result_file_path, 'wb'))
     print("done")
 
 # this method probably belongs in another file
 # hard: 0/False = the text is not hard, 1/True = the text is hard
-def time_get_str(isHard): # returns list of tuples of all articles which are easy or hard
-    with sqlite3.connect("corpus.sqlite") as con:
+def time_get_str(isHard, database_file_path = "corpus.sqlite"): # returns list of tuples of all articles which are easy or hard
+    with sqlite3.connect(database_file_path) as con:
         cur = con.cursor()
         cur.execute("""
         SELECT article_text FROM Training
@@ -265,9 +265,9 @@ class SVMVectorizer(Vectorizer):
 
         # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
         # print('forming svm vector:', flush=True)
-        index = 1
+        # index = 1
         for easy_index, hard_index in self.get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), n):
-            process = psutil.Process(os.getpid())
+            # process = psutil.Process(os.getpid())
             # print("adding n =", index, "; using", process.memory_info().rss // 1000000, "MB... ", end="", flush=True)
             svm_vectors_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
             results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
@@ -275,7 +275,7 @@ class SVMVectorizer(Vectorizer):
             svm_vectors_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
             results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
             # print("done")
-            index += 1
+            # index += 1
 
             # print('easy text', len(easy_texts_list))
             # print('hard text', len(hard_texts_list))

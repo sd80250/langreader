@@ -49,7 +49,7 @@ def get_times_articles(): # txt is what text file to put the scraped articles in
 			print('length of links list:', len(links_list))
 
 	# from those URLs, scrape the text
-	text_list = set()
+	text_list = []
 	number = 0
 
 	for link in links_list:
@@ -58,7 +58,7 @@ def get_times_articles(): # txt is what text file to put the scraped articles in
 		article_string = ""
 		for paragraph in soup.find_all('p')[:-1]: # omit the last paragraph, which is an email address
 			article_string += paragraph.get_text() + "\n"
-		text_list.add(article_string)
+		text_list.append((article_string, 1, 'https://time.com' + link, None))
 		number += 1
 
 
@@ -66,9 +66,9 @@ def get_times_articles(): # txt is what text file to put the scraped articles in
 	with sqlite3.connect("corpus.sqlite") as con:
 		cur = con.cursor()
 		cur.executemany("""
-		INSERT INTO Training(article_text, difficult)
-		VALUES(?,?)
-		""", list((i, 1) for i in text_list))
+		INSERT OR IGNORE INTO TestAndTraining(article_text, difficult, article_url, grade_level)
+		VALUES(?,?,?,?)
+		""", text_list)
 
 
 def get_times_for_kids_articles():
@@ -87,29 +87,29 @@ def get_times_for_kids_articles():
 			print('length of links list:', len(links_list))
 
 	# from the URLs, scrape the text
-	text_list = set()
+	text_list = []
 	number = 0
 
 	for link in links_list:
 		soup = get_soup_from_URL(link)
 		main_body = soup.find('div', class_= 'article-show__content-article')
-		print('scraping link', number, link)
 		article_string = ""
 		for paragraph in main_body.find_all(['p', 'h2']):
 			# finds highlighted words with dictionary definitions, which ruins the layout of the text, and deletes it
 			for span in paragraph.find_all('span', class_='definition'): 
 				span.extract()
 			article_string += paragraph.get_text() + "\n"
-		text_list.add(article_string)
+		text_list.append((article_string, 0, link, link[29])) # denotes grade level: either 1, 2, 3, or 5, depending on whether it's 'k1', 'g2', 'g34', or 'g56'
+		print("scraped link", number, "with values", 0, link, link[29])
 		number += 1
 	
 	# put the text in a database
 	with sqlite3.connect("corpus.sqlite") as con:
 		cur = con.cursor()
 		cur.executemany("""
-		INSERT INTO Training(article_text, difficult)
-		VALUES(?,?)
-		""", list((i, 0) for i in text_list))
+		INSERT or IGNORE INTO TestAndTraining(article_text, difficult, article_url, grade_level)
+		VALUES(?,?,?,?)
+		""", text_list)
 
 # get_times_articles()
 # get_times_for_kids_articles()

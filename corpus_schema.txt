@@ -3,9 +3,19 @@ CREATE TABLE Training (
     difficult BOOLEAN NOT NULL CHECK (difficult IN (0, 1))
 );
 
+# updated training data with more metadata
+
+CREATE TABLE TestAndTraining (
+    article_text TEXT UNIQUE NOT NULL,
+    difficult BOOLEAN NOT NULL,
+    article_url TEXT UNIQUE NOT NULL,
+    grade_level INTEGER,
+    CHECK ((difficult = 1 AND grade_level IS null) OR (difficult = 0 AND grade_level IN (1, 2, 3, 5)))
+);
+
 CREATE TABLE Repository (
     article_id INTEGER PRIMARY KEY,
-    article_title TEXT,
+    article_title TEXT NOT NULL,
     article_text TEXT UNIQUE,
     article_url TEXT UNIQUE,
     date_time_added TEXT,
