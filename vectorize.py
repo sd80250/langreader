@@ -224,7 +224,7 @@ class SubtractionVectorizer(Vectorizer):
         
         return svm_vector
 
-class SVMVectorizer(Vectorizer):
+class ReturnVectorizer(Vectorizer):
     # randomly pairs up the indeces of the values in vector A with the indeces of the values in vector B
     # n is the number of pairs that we would like
     # the output is guaranteed no duplicate pairs thanks to the random.sample method
@@ -283,7 +283,7 @@ class SVMVectorizer(Vectorizer):
 
         return np.asarray(svm_vectors_list), np.asarray(results_list)
 
-class SGDVectorizer(Vectorizer):
+class YieldVectorizer(Vectorizer):
     def get_training_vector_indeces(self, length_A, length_B, n):
         random_values = list(range(length_A*length_B))
         random.shuffle(random_values)
@@ -293,6 +293,63 @@ class SGDVectorizer(Vectorizer):
         for i in range(0, len(training_vector_indeces), n):
             yield training_vector_indeces[i:i+n]
     
+    def get_training_and_test_vector_indeces(self, length_A, length_B, n, test_train_split=.667): # test split is the proportion of values in list A and list B which will be partitioned off for training
+        a_list = range(length_A)
+        b_list = range(length_B)
+        a_training = random.sample(a_list, int(length_A*test_train_split))
+        b_training = random.sample(b_list, int(length_B*test_train_split))
+        a_test = []
+        b_test = []
+
+        for a in a_list:
+            if a not in a_training:
+                a_test.append(a)
+        for b in b_list:
+            if b not in b_training:
+                b_test.append(b)
+        
+        for training_indeces, test_indeces in zip(self.get_training_vector_indeces(len(a_training), len(b_training), int(n*test_train_split)), self.get_training_vector_indeces(len(a_test), len(b_test), int(n*(1-test_train_split)))):
+            yield [(a_training[a_index], b_training[b_index]) for a_index, b_index in training_indeces], [(a_test[a_index], b_test[b_index]) for a_index, b_index in test_indeces]
+    
+    def make_test_and_training_data(self, batch_size_times_two, test_train_split=.667):
+        easy_texts_list = []
+        hard_texts_list = []
+
+        indexed_global_vector = make_indexed(global_vector())
+
+        print('getting articles... ', end='', flush=True)
+        for article in time_get_str(False):
+            easy_texts_list.append(make_relative(frequency_vector(article[0])))
+        for article in time_get_str(True):
+            hard_texts_list.append(make_relative(frequency_vector(article[0])))
+        print('done')
+
+        for training_batch, test_batch in self.get_training_and_test_vector_indeces(len(easy_texts_list), len(hard_texts_list), batch_size_times_two, test_train_split=test_train_split):
+            sgd_vectors_list = []
+            training_results_list = []
+
+            test_list = []
+            test_results_list = []
+            # print(training_batch)
+            # print(test_batch)
+            for easy_index, hard_index in training_batch:
+                # prepares vectors as arrays
+                sgd_vectors_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
+                training_results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
+                
+                # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
+                sgd_vectors_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
+                training_results_list.append(1)
+
+            for easy_index, hard_index in test_batch:
+                test_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index], indexed_global_vector))
+                test_results_list.append(-1) # -1 means the difficulty of text1 < the difficulty of text2
+                # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should be trained that way)
+                test_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index], indexed_global_vector))
+                test_results_list.append(1)
+
+            yield np.array(sgd_vectors_list), np.array(training_results_list), np.array(test_list), np.array(test_results_list)
+
     def make_training_data(self, batch_size_times_two):
         easy_texts_list = [] 
         hard_texts_list = []
@@ -309,8 +366,9 @@ class SGDVectorizer(Vectorizer):
         print('done')
         # print('easy text', len(easy_texts_list))
         # print('hard text', len(hard_texts_list))
+
         # from the vector indeces, form svm vectors, and pass them onto numpy arrays to be processed by the svm
-        index = 1
+        # index = 1
         for batch in self.get_training_vector_indeces(len(easy_texts_list), len(hard_texts_list), batch_size_times_two):
 
             # reset svm_vector and result_list
@@ -332,50 +390,23 @@ class SGDVectorizer(Vectorizer):
                 results_list.append(1) # 1 means the difficulty of text1 > the difficulty of text2
                 
                 # print("done")
-                index += 1
+                # index += 1
             
             # print('done forming svm vector; now converting to numpy arrays')
             yield np.array(svm_vectors_list), np.array(results_list)
 
 
-class SVMConcatenationVectorizer(ConcatenationVectorizer, SVMVectorizer): # multiple inheritance!!!!
-    # gets from ConcatenationVectorizer
-    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector):
-        return super().prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector)
-    
-    # gets from SVMVectorizer
-    def get_training_vector_indeces(self, length_A, length_B, n):
-        return super().get_training_vector_indeces(length_A, length_B, n)
-    
-    # gets from SVMVectorizer
-    def make_training_data(self, n):
-        return super().make_training_data(n)
+class ReturnConcatenationVectorizer(ConcatenationVectorizer, ReturnVectorizer): # multiple inheritance!!!!
+    pass
 
-class SGDConcatenationVectorizer(ConcatenationVectorizer, SGDVectorizer):
-    # gets from ConcatenationVectorizer
-    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector):
-        return super().prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector)
-    
-    # gets from SGDVectorizer
-    def get_training_vector_indeces(self, length_A, length_B, n):
-        return super().get_training_vector_indeces(length_A, length_B, n)
-    
-    # gets from SGDVectorizer
-    def make_training_data(self, n):
-        return super().make_training_data(n)
+class YieldConcatenationVectorizer(ConcatenationVectorizer, YieldVectorizer):
+    pass
 
-class SVMSubtractionVectorizer(SubtractionVectorizer, SVMVectorizer):
-    # gets from SubtractionVectorizer
-    def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector):
-        return super().prepare_for_svm(text_vector_A, text_vector_B, indexed_global_vector)
-    
-    # gets from SVMVectorizer
-    def get_training_vector_indeces(self, length_A, length_B, n):
-        return super().get_training_vector_indeces(length_A, length_B, n)
-    
-    # gets from SVMVectorizer
-    def make_training_data(self, n):
-        return super().make_training_data(n)
+class ReturnSubtractionVectorizer(SubtractionVectorizer, ReturnVectorizer):
+    pass
+
+class YieldSubtractionVectorizer(SubtractionVectorizer, YieldVectorizer):
+    pass
 
 # svm = SVMSubtractionVectorizer()
 # a, b = svm.make_training_data(10)

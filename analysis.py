@@ -14,7 +14,7 @@ def time_for_kids_get_data(): # returns list of tuples of all articles which are
         """)
         return cur.fetchall()
 
-def analyse(): # oops i'm not british i swear
+def analyse(file_path='models/svm_model563.p'): # oops i'm not british i swear
     print("getting data... ", end = "", flush=True)
     data = time_for_kids_get_data()
     print("done")
@@ -40,14 +40,14 @@ def analyse(): # oops i'm not british i swear
     print("done")
     
     print("loading svm... ", end = "", flush=True)
-    svclassifier = pickle.load(open('models/svm_model563.p', 'rb'))
+    svclassifier = pickle.load(open(file_path, 'rb'))
     print("done")
 
     pair_data(k1_list, g2_list, g34_list, g56_list, svclassifier)
 
     
 def pair_data(list1, list2, list3, list4, svclassifier): # lists should be in order from easiest to hardest
-    vectorizer = v.SVMSubtractionVectorizer()
+    vectorizer = v.ReturnSubtractionVectorizer()
     indexed_global_vector = v.make_indexed(v.global_vector())
     for name, easy_list, hard_list in [("1v2", list1, list2), ("1v3", list1, list3), ("1v5", list1, list4), ("2v3", list2, list3), ("2v5", list2, list4), ("3v5", list3, list4)]:
         X_test, y_test = pair_data_pair(vectorizer, easy_list, hard_list, indexed_global_vector)

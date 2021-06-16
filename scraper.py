@@ -3,6 +3,9 @@ from bs4 import BeautifulSoup
 import re
 from nltk.tokenize import word_tokenize
 import sqlite3
+from selenium import webdriver
+import time
+from selenium.webdriver.chrome.options import Options
 
 # soup is the html (but transformed into a python-manipulatable object) 
 # that comes from scraping a website
@@ -114,8 +117,62 @@ def get_times_for_kids_articles():
 # get_times_articles()
 # get_times_for_kids_articles()
 
+# SCRAPING SPANISH LANGUAGE TEXTS
+
+def try_scraping_spanish_site():
+	chrome_options = Options()
+	chrome_options.add_argument("--incognito")
+	chrome_options.add_argument("--window-size=1920x1080")
+
+	driver = webdriver.Chrome(chrome_options=chrome_options, executable_path="/Users/shawnduan/Documents/GitHub/langreader/chromedriver")
+	
+	url = "https://www.newsinslowspanish.com/home/news/beginner"
+	usern = "sd80250@gmail.com"
+	passw = "$8ppN5DcUW4dk73"
+
+	driver.get(url)
+	time.sleep(3)
+
+	elements = driver.find_elements_by_css_selector(".signin")
+	signin_button = elements[0]
+	signin_button.click()
+
+	elements = driver.find_elements_by_css_selector("#username")
+	username = elements[0]
+	username.clear()
+	username.send_keys(usern)
+
+	elements = driver.find_elements_by_css_selector("#password")
+	password = elements[0]
+	password.clear()
+	password.send_keys(passw)
+
+	elements = driver.find_elements_by_css_selector(".primary")
+	login = elements[0]
+	login.click()
 
 
+
+	# browser = mechanicalsoup.StatefulBrowser()
+	# browser.open("https://www.newsinslowspanish.com/home/news/beginner")
+	# browser.select_form()
+	# soup = browser.form.form
+
+	# username_tag = soup.select(".login-username")[0]
+	# password_tag = soup.select(".login-password")[0]
+
+	# username_tag['name'] = 'username'
+	# password_tag['name'] = 'password'
+
+	# browser.form.set_input({"username": username, "password": password})
+	# browser.launch_browser()
+	# # print(browser.page)
+	# # print("\n\n")
+
+
+	# response = browser.submit_selected()
+	# browser.launch_browser()
+	
 
 
 

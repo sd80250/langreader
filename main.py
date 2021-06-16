@@ -102,7 +102,7 @@ def test(poem_path, model_path=None):
 
     svm_model = svm.load_model(model_path)
     indexed_global_vector = v.make_indexed(v.global_vector())
-    vectorizer = v.SVMSubtractionVectorizer()
+    vectorizer = v.ReturnSubtractionVectorizer()
 
     if model_path:
         poems = pd.DataFrame(pd.read_csv(
@@ -205,7 +205,7 @@ def init_variables(text_list):
 
     svm_model = svm.load_model('models/svm_model563.p')
     indexed_global_vector = v.make_indexed(v.global_vector())
-    vectorizer = v.SVMSubtractionVectorizer()
+    vectorizer = v.ReturnSubtractionVectorizer()
     index_list = text_list
 
 

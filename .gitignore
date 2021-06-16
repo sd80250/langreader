@@ -8,3 +8,4 @@ news-please/
 __pycache__/
 models/
 *.p
+chromedriver

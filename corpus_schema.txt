@@ -1,9 +1,13 @@
 CREATE TABLE Training (
-    article_text TEXT UNIQUE,
-    difficult BOOLEAN NOT NULL CHECK (difficult IN (0, 1))
+    article_text TEXT UNIQUE NOT NULL,
+    difficult BOOLEAN NOT NULL,
+    article_url TEXT UNIQUE,
+    grade_level INTEGER,
+    language TEXT NOT NULL,
+    CHECK (difficult IN (0, 1))
 );
 
-# updated training data with more metadata
+# for english texts only (i.e. this table's kinda redundant)
 
 CREATE TABLE TestAndTraining (
     article_text TEXT UNIQUE NOT NULL,
@@ -20,5 +24,6 @@ CREATE TABLE Repository (
     article_url TEXT UNIQUE,
     date_time_added TEXT,
     publication_or_publisher_name TEXT,
-    order_number INTEGER
+    order_number INTEGER,
+    language TEXT
 );
