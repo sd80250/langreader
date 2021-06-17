@@ -5,20 +5,27 @@ import numpy as np
 import pandas as pd
 import session
 import sqlite3
+import random
 
 # DB Management
-conn = sqlite3.connect("data.db")
+conn = sqlite3.connect("corpus.sqlite")
 c = conn.cursor()
 
 def main():
+    print('running 1')
     global session_state
 
-    session_state = session.get(username='', loggedIn = False)
+    order_strings = get_order_strings()
+    lower_bound = int(len(order_strings)*.25)
+    upper_bound = int(len(order_strings)*.75)
+    random_index = random.choice(range(lower_bound, upper_bound))
+
+    session_state = session.get(username='', loggedIn = False, text_displaying = get_text(order_strings[random_index]), order_strings = order_strings, index = random_index)
 
     menu = ["Home", "Login", "Signup"]
     st.title("Reader App")
 
-    print("logged in: {}".format(session_state.loggedIn))
+    print("running 2; logged in: {}".format(session_state.loggedIn))
 
     choice = st.sidebar.selectbox("Menu",menu)
     if choice == "Home":
@@ -39,11 +46,17 @@ def main():
             signup()
         
     
+
     if session_state.loggedIn == True:
         run_application()
 
 def create_usertable():
-    c.execute('CREATE TABLE IF NOT EXISTS userstable(username TEXT, password TEXT)')
+    c.execute('''        
+    CREATE TABLE IF NOT EXISTS UsersTable(
+        user_id INTEGER PRIMARY KEY,
+        username TEXT UNIQUE, 
+        password TEXT
+    )''')
 
 def add_userdata(username, password):
     c.execute('INSERT INTO userstable(username, password) VALUES (?,?)', (username, password))
@@ -91,20 +104,50 @@ def login():
         else:
             st.sidebar.error("Error: Username/Password is incorrect")
 
+def get_text(text_order_index):
+    c.execute('SELECT article_text FROM Repository WHERE order_string = ?', (text_order_index))
+    return c.fetchone()[0]
+
+def get_order_strings():
+    c.execute('SELECT order_string FROM Repository ORDER BY order_string')
+    return c.fetchall()
+
+def increment_index(difficulty):
+    if difficulty == 'Too Easy':
+        session_state.index += 5
+    elif difficulty == 'Just Right':
+        session_state.index += 2
+    elif difficulty == 'Too Hard':
+        session_state.index -= 3
+    
+    if session_state.index < 0:
+        session_state.index = 0
+        print('this is the first text in the corpus')
+    
+    if session_state.index > 99:
+        session_state.index = 99
+        print('this is the last text in the corpus')
+
+#TODO: add functionality for adding a new text to corpus if the user wants to
 def run_application():
+    print("running 3; Printing because loggedIn is {0} and index is {1}".format(session_state.loggedIn, session_state.index))
+
     st.success("Welcome, {}".format(session_state.username))
-    print("Printing because loggedIn is {}".format(session_state.loggedIn))
-    story = st.text_area("Enter Text: ")
+
+    st.progress(session_state.index)
+    st.markdown("**Please read the text carefully.**")
+    st.code("\n\n" + session_state.text_displaying, language=None)
+
     difficulty = st.select_slider(
-        'Select the level of difficulty of this text for you',
+        'How hard is this text for you?',
         options=['Too Easy', 'Just Right', 'Too Hard'])
-    st.write('Difficulty selected: ', difficulty)
-
-
-    if story != "":
-        st.write('''Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots in a piece of classical Latin literature from 45 BC, making it over 2000 years old. Richard McClintock, a Latin professor at Hampden-Sydney College in Virginia, looked up one of the more obscure Latin words, consectetur, from a Lorem Ipsum passage, and going through the cites of the word in classical literature, discovered the undoubtable source. Lorem Ipsum comes from sections 1.10.32 and 1.10.33 of "de Finibus Bonorum et Malorum" (The Extremes of Good and Evil) by Cicero, written in 45 BC. This book is a treatise on the theory of ethics, very popular during the Renaissance. The first line of Lorem Ipsum, "Lorem ipsum dolor sit amet..", comes from a line in section 1.10.32.''')
-
-
+    st.write('Difficulty: ' + difficulty)
+    #TODO: present user with three texts and allow them to choose afterwards (or something similar)
+    if st.button('Get Another Text!'): #TODO: make sure user doesn't get the same text twice!
+        print("running 4; button pressed")
+        increment_index(difficulty)
+        session_state.text_displaying = get_text(session_state.order_strings[session_state.index])
+        st.experimental_rerun()
 if __name__ == '__main__':
     main()
 

@@ -1,3 +1,5 @@
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE Training (
     article_text TEXT UNIQUE NOT NULL,
     difficult BOOLEAN NOT NULL,
@@ -17,6 +19,13 @@ CREATE TABLE TestAndTraining (
     CHECK ((difficult = 1 AND grade_level IS null) OR (difficult = 0 AND grade_level IN (1, 2, 3, 5)))
 );
 
+
+CREATE TABLE UsersTable(
+    user_id INTEGER PRIMARY KEY,
+    username TEXT UNIQUE, 
+    password TEXT
+);
+
 CREATE TABLE Repository (
     article_id INTEGER PRIMARY KEY,
     article_title TEXT NOT NULL,
@@ -24,6 +33,8 @@ CREATE TABLE Repository (
     article_url TEXT UNIQUE,
     date_time_added TEXT,
     publication_or_publisher_name TEXT,
-    order_number INTEGER,
-    language TEXT
+    order_string TEXT,
+    language TEXT,
+    added_by INTEGER,
+    FOREIGN KEY (added_by) REFERENCES UsersTable (user_id) ON DELETE SET NULL
 );
