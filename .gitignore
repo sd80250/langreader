@@ -1,11 +1,12 @@
 data.csv
 data.db
 time_for_kids_scraped.txt
-all.csv
+resources/poems/all.csv
 env/
 cc_net/ 
 news-please/
 __pycache__/
-models/
+resources/models/
 *.p
-chromedriver
+resources/chromedriver
+resources/.DS_store
