@@ -7,20 +7,29 @@ import random
 import corpus
 
 # DB Management
-conn = sqlite3.connect("resources/sqlite/corpus.sqlite")
-c = conn.cursor()
+conn1 = sqlite3.connect("resources/sqlite/corpus.sqlite")
+c1 = conn1.cursor()
+
+# initialization
+corpus_length = corpus.get_corpus_length()
+lower_bound = int(corpus_length*.25)
+upper_bound = int(corpus_length*.75)
+random_index = random.choice(range(lower_bound, upper_bound))
+
+all_text_info = corpus.get_all_from_index(random_index)
+
+text_title = all_text_info[1]
+text_text = all_text_info[2]
+text_url = all_text_info[3]
+text_author = all_text_info[9]
+
+session_state = session.get(username='', loggedIn = False, title_displaying=text_title, \
+    text_displaying=text_text, author_displaying=text_author, url_displaying=text_url ,index=random_index, button_submitted=False)
 
 def main():
     print('running 1')
     global session_state
-
-    order_strings = get_order_strings()
-    lower_bound = int(len(order_strings)*.25)
-    upper_bound = int(len(order_strings)*.75)
-    random_index = random.choice(range(lower_bound, upper_bound))
-
-    session_state = session.get(username='', loggedIn = False, text_displaying = get_text(order_strings[random_index]), order_strings = order_strings, index = random_index)
-
+    
     menu = ["Home", "Login", "Signup"]
     st.title("Reader App")
 
@@ -43,14 +52,14 @@ def main():
     elif choice == "Signup":
         if not session_state.loggedIn:
             signup()
-        
-    
+
 
     if session_state.loggedIn == True:
         run_application()
 
+# --username/password management--
 def create_usertable():
-    c.execute('''        
+    c1.execute('''        
     CREATE TABLE IF NOT EXISTS UsersTable(
         user_id INTEGER PRIMARY KEY,
         username TEXT UNIQUE, 
@@ -58,17 +67,17 @@ def create_usertable():
     )''')
 
 def add_userdata(username, password):
-    c.execute('INSERT INTO userstable(username, password) VALUES (?,?)', (username, password))
-    conn.commit()
+    c1.execute('INSERT INTO userstable(username, password) VALUES (?,?)', (username, password))
+    conn1.commit()
 
 def login_user(username, password):
-    c.execute('SELECT * FROM userstable WHERE username =? AND password = ?',(username, password))
-    data = c.fetchall()
+    c1.execute('SELECT * FROM userstable WHERE username =? AND password = ?',(username, password))
+    data = c1.fetchall()
     return data
 
 def view_all_users():
-    c.execute('SELECT * FROM userstable')
-    data = c.fetchall()
+    c1.execute('SELECT * FROM userstable')
+    data = c1.fetchall()
     return data
     
 def reset():
@@ -103,13 +112,6 @@ def login():
         else:
             st.sidebar.error("Error: Username/Password is incorrect")
 
-def get_text(text_order_index):
-    c.execute('SELECT article_text FROM Repository WHERE order_string = ?', (text_order_index))
-    return c.fetchone()[0]
-
-def get_order_strings():
-    c.execute('SELECT order_string FROM Repository ORDER BY order_string')
-    return c.fetchall()
 
 def increment_index(difficulty):
     if difficulty == 'Too Easy':
@@ -119,6 +121,7 @@ def increment_index(difficulty):
     elif difficulty == 'Too Hard':
         session_state.index -= 3
     
+    # won't work when new texts are added
     if session_state.index < 0:
         session_state.index = 0
         print('this is the first text in the corpus')
@@ -126,6 +129,32 @@ def increment_index(difficulty):
     if session_state.index > 99:
         session_state.index = 99
         print('this is the last text in the corpus')
+
+
+def get_next_indices(difficulty, index):
+    index_list = None
+    if difficulty == 'Too Easy':
+        index_list = set(range(index + 5, index + 20, 5))
+    elif difficulty == 'Just Right':
+        index_list = set(range(index + 2, index + 8, 2))
+    elif difficulty == 'Too Hard':
+        index_list = set(range(index - 3, index - 12, -3))
+
+    # this won't work as new texts are added
+    difference_set = set()
+    for i in index_list:
+        if i < 0 or i > 99:
+            difference_set.add(i)
+
+    index_list -= difference_set
+
+    if len(index_list) == 0:
+        if index < 50:
+            index_list = {0}
+        else:
+            index_list = {99}
+
+    return index_list
 
 #TODO: add functionality for adding a new text to corpus if the user wants to
 def run_application():
@@ -135,18 +164,50 @@ def run_application():
 
     st.progress(session_state.index)
     st.markdown("**Please read the text carefully.**")
-    st.code("\n\n" + session_state.text_displaying, language=None)
+    st.markdown("**_" + session_state.title_displaying + "_**")
+    # st.write(f'<iframe src="https://www.gutenberg.org/files/398/398-h/398-h.htm#chap00" height="2400" width="800"></iframe>', unsafe_allow_html=True)
+    if session_state.author_displaying:
+        st.markdown("*by " + session_state.author_displaying + "*")
+    if session_state.text_displaying:
+        st.code(session_state.text_displaying, language="")
+    elif session_state.url_displaying:
+        st.write(f'<iframe src="' + url + '" height="2400" width="800"></iframe>', unsafe_allow_html=True)
 
-    difficulty = st.select_slider(
-        'How hard is this text for you?',
-        options=['Too Easy', 'Just Right', 'Too Hard'])
-    st.write('Difficulty: ' + difficulty)
-    #TODO: present user with three texts and allow them to choose afterwards (or something similar)
-    if st.button('Get Another Text!'): #TODO: make sure user doesn't get the same text twice!
+    with st.form('hi'):
+        difficulty = st.select_slider(
+            'How hard is this text for you?',
+            options=['Too Easy', 'Just Right', 'Too Hard'])
+        submit = st.form_submit_button('Get Another Text!')
+        #TODO: present user with three texts and allow them to choose afterwards (or something similar)
+    
+    if session_state.button_submitted or submit: #TODO: make sure user doesn't get the same text twice!
         print("running 4; button pressed")
-        increment_index(difficulty)
-        session_state.text_displaying = get_text(session_state.order_strings[session_state.index])
-        st.experimental_rerun()
+
+        st.write('Here are some texts we thought would be appropriate:')
+
+        next_indices = get_next_indices(difficulty, session_state.index)
+
+        session_state.button_submitted = True # the button resets to False even if one of its children are pressed, so a persistent state is needed
+
+        for column, indix in zip(st.beta_columns(len(next_indices)), next_indices):
+            all_text_info_ = corpus.get_all_from_index(indix)
+
+            text_title_ = all_text_info_[1]
+            text_text_ = all_text_info_[2]
+            text_url_ = all_text_info_[3]
+            text_author_ = all_text_info_[9]
+
+            with column:
+                if st.button(text_title_):
+                    print('running 5; button pressed')
+                    session_state.index = indix
+                    session_state.title_displaying = text_title_
+                    session_state.text_displaying = text_text_
+                    session_state.url_displaying = text_url_
+                    session_state.author_displaying = text_author_
+                    session_state.button_submitted = False
+                    st.experimental_rerun()
+
 if __name__ == '__main__':
     main()
 

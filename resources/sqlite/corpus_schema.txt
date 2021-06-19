@@ -36,5 +36,6 @@ CREATE TABLE Repository (
     order_string TEXT,
     language TEXT,
     added_by INTEGER,
+    article_author TEXT,
     FOREIGN KEY (added_by) REFERENCES UsersTable (user_id) ON DELETE SET NULL
 );

@@ -11,7 +11,7 @@ svm_model = None
 indexed_global_vector = None
 vectorizer = None
 
-def make_and_test_model(pairs_of_test_data, name='resources/svm_model.p', samples=1000):
+def make_and_test_model(pairs_of_test_data, name='langreader/sort/resources/svm_model.p', samples=1000):
     # get training data
     print("making training data:", flush=True)
     vectorizer = v.YieldSubtractionVectorizer()
@@ -155,6 +155,7 @@ def make_and_test_SGD_model(data_per_batch_times_two, n_iters, model_name="sgd_m
 
 def load_model(file_path):
     return pickle.load(open(file_path, 'rb'))
+
 
 def compare(text1, text2, file_path='langreader/sort/resources/svm_model.p'):
     global svm_model

@@ -5,6 +5,14 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+from gutenberg.acquire import load_etext
+from gutenberg.cleanup import strip_headers
+from gutenberg.query import get_etexts
+from gutenberg.query import get_metadata
+
+
+import langreader.app.corpus
+
 
 # soup is the html (but transformed into a python-manipulatable object)
 # that comes from scraping a website
@@ -14,6 +22,7 @@ def get_soup_from_URL(URL):
     return soup
 
 
+# --scraping Time and Time for Kids for training--
 # for time.com specifcially
 def scrape_time_links(URL, links_list: set):
     soup = get_soup_from_URL(URL)
@@ -116,11 +125,29 @@ def get_times_for_kids_articles():
 		""", text_list)
 
 
-# get_times_articles()
-# get_times_for_kids_articles()
+# --scraping Project Gutenburg texts--
+def scrape_christian_texts():
+    urls = set()
+    for start_index in range(1, 177, 25):
+        soup = get_soup_from_URL('https://www.gutenberg.org/ebooks/bookshelf/119?start_index=' + start_index)
+        booklinks = soup.find_all('li', class_='booklink')
+        for booklink in booklinks:
+            urls.add(booklink.find('a').get('href'))
+    
+    index = 0
+    for url in urls:
+        ebook_code = url[8:]
+        if 'English' not in get_metadata('language', ebook_code): # TEST TO MAKE SURE THIS IS RIGHT
+            continue
+        text = strip_headers(load_etext(ebook_code)).strip()
+        corpus.insert_in_corpus(get_metadata('title', ebook_code), text, 2, \
+            url='https://www.gutenberg.org/files/' + ebook_code + '/' + ebook_code + '-h/' + ebook_code + '-h.htm', \
+            author=get_metadata('author', ebook_code), exclude_text=True)
+        print('url', index, 'done')
+        index += 1
+    
 
-# SCRAPING SPANISH LANGUAGE TEXTS
-
+# --scraping Spanish texts--
 def try_scraping_spanish_site():
     chrome_options = Options()
     chrome_options.add_argument("--incognito")
@@ -152,23 +179,26 @@ def try_scraping_spanish_site():
     elements = driver.find_elements_by_css_selector(".primary")
     login = elements[0]
     login.click()
+    # browser = mechanicalsoup.StatefulBrowser()
+    # browser.open("https://www.newsinslowspanish.com/home/news/beginner")
+    # browser.select_form()
+    # soup = browser.form.form
 
-# browser = mechanicalsoup.StatefulBrowser()
-# browser.open("https://www.newsinslowspanish.com/home/news/beginner")
-# browser.select_form()
-# soup = browser.form.form
+    # username_tag = soup.select(".login-username")[0]
+    # password_tag = soup.select(".login-password")[0]
 
-# username_tag = soup.select(".login-username")[0]
-# password_tag = soup.select(".login-password")[0]
+    # username_tag['name'] = 'username'
+    # password_tag['name'] = 'password'
 
-# username_tag['name'] = 'username'
-# password_tag['name'] = 'password'
-
-# browser.form.set_input({"username": username, "password": password})
-# browser.launch_browser()
-# # print(browser.page)
-# # print("\n\n")
+    # browser.form.set_input({"username": username, "password": password})
+    # browser.launch_browser()
+    # # print(browser.page)
+    # # print("\n\n")
 
 
-# response = browser.submit_selected()
-# browser.launch_browser()
+    # response = browser.submit_selected()
+    # browser.launch_browser()
+
+
+if __name__ == '__main__':
+    scrape_christian_texts()
