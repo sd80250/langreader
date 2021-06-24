@@ -26,6 +26,8 @@ CREATE TABLE UsersTable(
     password TEXT
 );
 
+
+# if the text_type is 'gutenberg,' then the article_url will contain the book code rather than the actual url
 CREATE TABLE Repository (
     article_id INTEGER PRIMARY KEY,
     article_title TEXT NOT NULL,
@@ -37,5 +39,6 @@ CREATE TABLE Repository (
     language TEXT,
     added_by INTEGER,
     article_author TEXT,
+    text_type TEXT,
     FOREIGN KEY (added_by) REFERENCES UsersTable (user_id) ON DELETE SET NULL
 );

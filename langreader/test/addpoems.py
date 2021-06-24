@@ -37,8 +37,8 @@ if __name__ == '__main__':
     #     print('inserted', index)
     # print('done')
     df = pd.DataFrame(pd.read_csv('resources/poems/PoetryFoundationData.csv'), columns=['Poem', 'Title', 'Poet'])
-    index = 100
-    for text, title, author in list(df.to_records(index=False))[100:]:
+    index = 945
+    for text, title, author in list(df.to_records(index=False))[945:]:
         corpus.insert_in_corpus(title, text, 2, author=author)
         print(index)
         index += 1

@@ -9,9 +9,14 @@ from gutenberg.acquire import load_etext
 from gutenberg.cleanup import strip_headers
 from gutenberg.query import get_etexts
 from gutenberg.query import get_metadata
+from gutenberg.acquire.text import _format_download_uri
 
+import sys
+import os
+sys.path.insert(0, "")
 
-import langreader.app.corpus
+import langreader.app.corpus as corpus
+import pickle
 
 
 # soup is the html (but transformed into a python-manipulatable object)
@@ -127,25 +132,44 @@ def get_times_for_kids_articles():
 
 # --scraping Project Gutenburg texts--
 def scrape_christian_texts():
-    urls = set()
-    for start_index in range(1, 177, 25):
-        soup = get_soup_from_URL('https://www.gutenberg.org/ebooks/bookshelf/119?start_index=' + start_index)
-        booklinks = soup.find_all('li', class_='booklink')
-        for booklink in booklinks:
-            urls.add(booklink.find('a').get('href'))
+    # urls = set()
+    # for start_index in range(1, 177, 25):
+    #     soup = get_soup_from_URL('https://www.gutenberg.org/ebooks/bookshelf/119?start_index=' + str(start_index))
+    #     booklinks = soup.find_all('li', class_='booklink')
+    #     for booklink in booklinks:
+    #         urls.add(booklink.find('a').get('href'))
+
+    urls = pickle.load(open('resources/poems/gutenberg_urls.p', 'rb'))
     
     index = 0
-    for url in urls:
-        ebook_code = url[8:]
-        if 'English' not in get_metadata('language', ebook_code): # TEST TO MAKE SURE THIS IS RIGHT
+    for stub in urls:
+        ebook_code = int(stub[8:]) # gets rid of the initial '/ebook/' in string
+        print('index', index, 'scraping', str(ebook_code) + '...', end=' ', flush=True)
+
+        try:
+            # see if the book is in English
+            if 'en' not in get_metadata('language', ebook_code):
+                raise NameError('english not in language')
+            
+            # get text and insert the url within the corpus
+            text = strip_headers(load_etext(ebook_code)).strip()
+            title = list(get_metadata('title', ebook_code))[0]
+            author = list(get_metadata('author', ebook_code))
+            author = author[0] if len(author) > 0 else None
+            corpus.insert_in_corpus(title, text, 2, \
+                url=ebook_code, \
+                author=author, exclude_text=True, text_type='gutenberg')
+        except Exception as e:
+
+            print(e, 'continue')
+            index += 1
             continue
-        text = strip_headers(load_etext(ebook_code)).strip()
-        corpus.insert_in_corpus(get_metadata('title', ebook_code), text, 2, \
-            url='https://www.gutenberg.org/files/' + ebook_code + '/' + ebook_code + '-h/' + ebook_code + '-h.htm', \
-            author=get_metadata('author', ebook_code), exclude_text=True)
-        print('url', index, 'done')
+        
+        print('done')
         index += 1
-    
+
+    corpus.conn.commit()
+    print('changes committed')
 
 # --scraping Spanish texts--
 def try_scraping_spanish_site():
@@ -153,7 +177,7 @@ def try_scraping_spanish_site():
     chrome_options.add_argument("--incognito")
     chrome_options.add_argument("--window-size=1920x1080")
 
-    driver = webdriver.Chrome(chrome_options=chrome_options, executable_path="/chromedriver")
+    driver = webdriver.Chrome(chrome_options=chrome_options, executable_path="resources/chromedriver")
 
     url = "https://www.newsinslowspanish.com/home/news/beginner"
     usern = "sd80250@gmail.com"
@@ -179,6 +203,13 @@ def try_scraping_spanish_site():
     elements = driver.find_elements_by_css_selector(".primary")
     login = elements[0]
     login.click()
+    
+    for element in driver.find_elements_by_css_selector(".story"):
+        time.sleep(1)
+        element.click()
+        
+        # driver.back()
+        # time.sleep(1)
     # browser = mechanicalsoup.StatefulBrowser()
     # browser.open("https://www.newsinslowspanish.com/home/news/beginner")
     # browser.select_form()

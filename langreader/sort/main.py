@@ -194,7 +194,7 @@ def init_variables(text_list):
     global vectorizer
     global index_list
 
-    svm_model = svm.load_model('langreader/sort/resources/svm_model.p')
+    svm_model = svm.load_model('langreader/sort/resources/svm_model_varied_size.p')
     indexed_global_vector = v.get_indexed_global_vector()
     vectorizer = v.ReturnSubtractionVectorizer()
     index_list = text_list
@@ -239,23 +239,15 @@ def App(filepath, language="English"):
 
 
 if __name__ == '__main__':
-    if not path.exists('langreader/sort/resources/global_vector.p'):
-        print('path does not exist.')
-        import time
-        time.sleep(5)
-        v.make_global_vector()
-    if not path.exists('langreader/sort/resources/svm_model.p'):
-        svm.make_and_test_model(563)
-    if not path.exists('langreader/sort/resources/poems.p'):
+    if not path.exists('langreader/sort/resources/poems_varied_length.p'):
         df = pd.DataFrame(pd.read_csv('resources/poems/PoetryFoundationData.csv'), columns=['Poem', 'Title', 'Poet'])
         init_variables(list(df.to_records(index=False))[0:100])
         sorted_poems = [index_list[i] for i in init_sort(list(range(0, 100)), k_max=2)]
-        pickle.dump(sorted_poems, open('langreader/sort/resources/poems.p', 'wb'))
-    a = pickle.load(open('langreader/sort/resources/poems.p', 'rb'))
+        pickle.dump(sorted_poems, open('langreader/sort/resources/poems_varied_length.p', 'wb'))
+    
+    a = pickle.load(open('langreader/sort/resources/poems_varied_length.p', 'rb'))
 
     i = 0
     for text, title, author in a:
-        if i > 5:
-            break
+        print('{} {}'.format(title.strip(), i))
         i += 1
-        print(text.strip(), title.strip(), author)

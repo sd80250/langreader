@@ -20,7 +20,7 @@ all_text_info = corpus.get_all_from_index(random_index)
 
 text_title = all_text_info[1]
 text_text = all_text_info[2]
-text_url = all_text_info[3]
+text_url = corpus.find_gutenberg_url(all_text_info[3]) if all_text_info[10] == 'gutenberg' else all_text_info[3]
 text_author = all_text_info[9]
 
 session_state = session.get(username='', loggedIn = False, title_displaying=text_title, \
@@ -113,6 +113,7 @@ def login():
             st.sidebar.error("Error: Username/Password is incorrect")
 
 
+# --helper methods--
 def increment_index(difficulty):
     if difficulty == 'Too Easy':
         session_state.index += 5
@@ -134,52 +135,74 @@ def increment_index(difficulty):
 def get_next_indices(difficulty, index):
     index_list = None
     if difficulty == 'Too Easy':
-        index_list = set(range(index + 5, index + 20, 5))
+        interval = corpus_length//19
     elif difficulty == 'Just Right':
-        index_list = set(range(index + 2, index + 8, 2))
+        interval = 2
     elif difficulty == 'Too Hard':
-        index_list = set(range(index - 3, index - 12, -3))
+        interval = corpus_length//-31
+    index_list = set(range(index + interval, index + interval*4, interval))
 
     # this won't work as new texts are added
     difference_set = set()
     for i in index_list:
-        if i < 0 or i > 99:
+        if i < 0 or i > corpus_length - 1:
             difference_set.add(i)
 
     index_list -= difference_set
 
     if len(index_list) == 0:
-        if index < 50:
+        if index < corpus_length/2:
             index_list = {0}
         else:
-            index_list = {99}
+            index_list = {corpus_length - 1}
 
     return index_list
+
+
+def set_session_state(all_from_index, indix):
+    session_state.index = indix
+    session_state.title_displaying = all_from_index[1]
+    session_state.text_displaying = all_from_index[2]
+    session_state.url_displaying = corpus.find_gutenberg_url(all_from_index[3]) if all_from_index[10] == 'gutenberg' else all_from_index[3]
+    session_state.author_displaying = all_from_index[9]
+
 
 #TODO: add functionality for adding a new text to corpus if the user wants to
 def run_application():
     print("running 3; Printing because loggedIn is {0} and index is {1}".format(session_state.loggedIn, session_state.index))
 
     st.success("Welcome, {}!".format(session_state.username))
-
-    st.progress(session_state.index)
+    
+    st.write(session_state.index + 1, '/', corpus_length)
+    st.progress(session_state.index / corpus_length)
     st.markdown("**Please read the text carefully.**")
-    st.markdown("**_" + session_state.title_displaying + "_**")
+    
+    st.markdown("**_" + session_state.title_displaying.strip() + "_**")
     # st.write(f'<iframe src="https://www.gutenberg.org/files/398/398-h/398-h.htm#chap00" height="2400" width="800"></iframe>', unsafe_allow_html=True)
+    print('author:', session_state.author_displaying)
+    print('text:', True if session_state.text_displaying else False)
+    print('url:', session_state.url_displaying)
     if session_state.author_displaying:
         st.markdown("*by " + session_state.author_displaying + "*")
     if session_state.text_displaying:
-        st.code(session_state.text_displaying, language="")
+        if '\n' in session_state.text_displaying.strip():
+            st.code(session_state.text_displaying, language="")
+        else:
+            st.write(session_state.text_displaying)
     elif session_state.url_displaying:
-        st.write(f'<iframe src="' + url + '" height="2400" width="800"></iframe>', unsafe_allow_html=True)
+        st.write(f'<iframe src="' + session_state.url_displaying + '" height="900" width="800"></iframe>', unsafe_allow_html=True)
 
     with st.form('hi'):
         difficulty = st.select_slider(
             'How hard is this text for you?',
             options=['Too Easy', 'Just Right', 'Too Hard'])
+        interest = st.select_slider(
+            'How interesting is this text for you?',
+            options=['Quite Boring', 'Somewhat Interesting', 'Very Interesting']
+        )
         submit = st.form_submit_button('Get Another Text!')
-        #TODO: present user with three texts and allow them to choose afterwards (or something similar)
     
+    print('button_submitted:', session_state.button_submitted, "sumbit:", submit)
     if session_state.button_submitted or submit: #TODO: make sure user doesn't get the same text twice!
         print("running 4; button pressed")
 
@@ -190,23 +213,43 @@ def run_application():
         session_state.button_submitted = True # the button resets to False even if one of its children are pressed, so a persistent state is needed
 
         for column, indix in zip(st.beta_columns(len(next_indices)), next_indices):
-            all_text_info_ = corpus.get_all_from_index(indix)
-
-            text_title_ = all_text_info_[1]
-            text_text_ = all_text_info_[2]
-            text_url_ = all_text_info_[3]
-            text_author_ = all_text_info_[9]
+            all_from_index = corpus.get_all_from_index(indix)
 
             with column:
-                if st.button(text_title_):
+                if st.button(all_from_index[1]): # displays the title
                     print('running 5; button pressed')
-                    session_state.index = indix
-                    session_state.title_displaying = text_title_
-                    session_state.text_displaying = text_text_
-                    session_state.url_displaying = text_url_
-                    session_state.author_displaying = text_author_
+                    set_session_state(all_from_index, indix)
                     session_state.button_submitted = False
                     st.experimental_rerun()
+        
+        st.write('Here are the buttons for the easiest and hardest texts:')
+
+        col1, col2 = st.beta_columns(2)
+        with col1:
+            all_from_index = corpus.get_all_from_index(0)
+
+            if st.button(all_from_index[1], key=0):
+                print('running 6; button pressed')
+                set_session_state(all_from_index, 0)
+                session_state.button_submitted = False
+                st.experimental_rerun()
+        
+        with col2:
+            all_from_index = corpus.get_all_from_index(corpus_length - 1)
+
+            if st.button(all_from_index[1], key=1):
+                print('running 6; button pressed')
+                set_session_state(all_from_index, corpus_length - 1)
+                session_state.button_submitted = False
+                st.experimental_rerun()
+    else: # if the button hasn't been pressed
+        st.info("**Too Easy**: I understand the message, and I can read the text very fluently.\n\n \
+**Just Right**: I understand the message, but there are some words I don't understand.\n\n \
+**Too Hard**: I don't understand the message.")
+        st.info("**Quite Boring**: I would rather do anything than read a similar text.\n\n \
+**Somewhat Interesting**: I could keep reading something similar if I was asked to.\n\n \
+**Very Interesting**: I want to read a similar text right now!")        
+
 
 if __name__ == '__main__':
     main()

@@ -15,7 +15,7 @@ stemmer = SnowballStemmer('english')
 
 # this method probably belongs in another file
 # hard: 0/False = the text is not hard, 1/True = the text is hard
-def time_get_str(is_hard, database_file_path="langreader/sort/resources/sqlite/corpus.sqlite"):
+def time_get_str(is_hard, database_file_path="resources/sqlite/corpus.sqlite"):
     # returns list of tuples of all articles which are easy or hard
     with sqlite3.connect(database_file_path) as con:
         cur = con.cursor()
@@ -263,77 +263,6 @@ class YieldVectorizer(Vectorizer):
         for i in range(0, len(training_vector_indeces), n):
             yield training_vector_indeces[i:i + n]
 
-    def get_training_and_test_vector_indeces(self, length_A, length_B, n,
-                                             test_train_split=.667):  # test split is the proportion of values in list A and list B which will be partitioned off for training
-        a_list = range(length_A)
-        b_list = range(length_B)
-        a_training = random.sample(a_list, int(length_A * test_train_split))
-        b_training = random.sample(b_list, int(length_B * test_train_split))
-        a_test = []
-        b_test = []
-
-        for a in a_list:
-            if a not in a_training:
-                a_test.append(a)
-        for b in b_list:
-            if b not in b_training:
-                b_test.append(b)
-
-        for training_indeces, test_indeces in zip(
-                self.get_training_vector_indeces(len(a_training), len(b_training), int(n * test_train_split)),
-                self.get_training_vector_indeces(len(a_test), len(b_test), int(n * (1 - test_train_split)))):
-            yield [(a_training[a_index], b_training[b_index]) for a_index, b_index in training_indeces], [
-                (a_test[a_index], b_test[b_index]) for a_index, b_index in test_indeces]
-
-    def make_test_and_training_data(self, batch_size_times_two, test_train_split=.667):
-        easy_texts_list = []
-        hard_texts_list = []
-
-        igv = get_indexed_global_vector()
-
-        print('getting articles... ', end='', flush=True)
-        for article in time_get_str(False):
-            easy_texts_list.append(relative_frequency_vector(article[0]))
-        for article in time_get_str(True):
-            hard_texts_list.append(relative_frequency_vector(article[0]))
-        print('done')
-
-        for training_batch, test_batch in self.get_training_and_test_vector_indeces(len(easy_texts_list),
-                                                                                    len(hard_texts_list),
-                                                                                    batch_size_times_two,
-                                                                                    test_train_split=test_train_split):
-            sgd_vectors_list = []
-            training_results_list = []
-
-            test_list = []
-            test_results_list = []
-            # print(training_batch)
-            # print(test_batch)
-            for easy_index, hard_index in training_batch:
-                # prepares vectors as arrays
-                sgd_vectors_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index],
-                                                             igv))
-                training_results_list.append(-1)  # -1 means the difficulty of text1 < the difficulty of text2
-
-                # same thing as previous two lines but swapped (the algorithm is not necessarily reversible,
-                # so it should be trained that way)
-                sgd_vectors_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index],
-                                                             igv))
-                training_results_list.append(1)
-
-            for easy_index, hard_index in test_batch:
-                test_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index],
-                                                      igv))
-                test_results_list.append(-1)  # -1 means the difficulty of text1 < the difficulty of text2
-                # same thing as previous two lines but swapped (the algorithm is not necessarily reversible,
-                # so it should be trained that way)
-                test_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index],
-                                                      igv))
-                test_results_list.append(1)
-
-            yield np.array(sgd_vectors_list), np.array(training_results_list), np.array(test_list), np.array(
-                test_results_list)
-
     def make_training_data(self, batch_size_times_two):
         easy_texts_list = []
         hard_texts_list = []
@@ -381,6 +310,192 @@ class YieldVectorizer(Vectorizer):
             # print('done forming svm vector; now converting to numpy arrays')
             yield np.array(svm_vectors_list), np.array(results_list)
 
+    def get_training_and_test_vector_indeces(self, length_A, length_B, n,
+                                             test_train_split=.667):  # test split is the proportion of values in list A and list B which will be partitioned off for training
+        a_list = range(length_A)
+        b_list = range(length_B)
+        a_training = random.sample(a_list, int(length_A * test_train_split))
+        b_training = random.sample(b_list, int(length_B * test_train_split))
+        a_test = [a for a in a_list if a not in a_training]
+        b_test = [b for b in b_list if b not in b_training]
+
+        for training_indeces, test_indeces in zip(
+                self.get_training_vector_indeces(len(a_training), len(b_training), int(n * test_train_split)),
+                self.get_training_vector_indeces(len(a_test), len(b_test), int(n * (1 - test_train_split)))):
+            yield [(a_training[a_index], b_training[b_index]) for a_index, b_index in training_indeces], [
+                (a_test[a_index], b_test[b_index]) for a_index, b_index in test_indeces]
+
+    def make_test_and_training_data(self, batch_size_times_two, test_train_split=.667):
+        easy_texts_list = []
+        hard_texts_list = []
+
+        igv = get_indexed_global_vector()
+
+        print('getting articles... ', end='', flush=True)
+        for article in time_get_str(False):
+            easy_texts_list.append(relative_frequency_vector(article[0]))
+        for article in time_get_str(True):
+            hard_texts_list.append(relative_frequency_vector(article[0]))
+        print('done')
+
+        for i in self.yield_vectors(easy_texts_list, hard_texts_list, igv, batch_size_times_two, test_train_split):
+            yield i
+    
+    def yield_vectors(self, easy_texts_list, hard_texts_list, igv, batch_size_times_two, test_train_split):
+        for training_batch, test_batch in self.get_training_and_test_vector_indeces(len(easy_texts_list),
+                                                                                    len(hard_texts_list),
+                                                                                    batch_size_times_two,
+                                                                                    test_train_split=test_train_split):
+            sgd_vectors_list = []
+            training_results_list = []
+
+            test_list = []
+            test_results_list = []
+            # print(training_batch)
+            # print(test_batch)
+            for easy_index, hard_index in training_batch:
+                # prepares vectors as arrays
+                sgd_vectors_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index],
+                                                             igv))
+                training_results_list.append(-1)  # -1 means the difficulty of text1 < the difficulty of text2
+
+                # same thing as previous two lines but swapped (the algorithm is not necessarily reversible,
+                # so it should be trained that way)
+                sgd_vectors_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index],
+                                                             igv))
+                training_results_list.append(1)
+
+            for easy_index, hard_index in test_batch:
+                test_list.append(self.prepare_for_svm(easy_texts_list[easy_index], hard_texts_list[hard_index],
+                                                      igv))
+                test_results_list.append(-1)  # -1 means the difficulty of text1 < the difficulty of text2
+                # same thing as previous two lines but swapped (the algorithm is not necessarily reversible,
+                # so it should be trained that way)
+                test_list.append(self.prepare_for_svm(hard_texts_list[hard_index], easy_texts_list[easy_index],
+                                                      igv))
+                test_results_list.append(1)
+
+            yield np.array(sgd_vectors_list), np.array(training_results_list), np.array(test_list), np.array(
+                test_results_list)
+
+
+class VariedLengthYieldVectorizer(YieldVectorizer):
+    def make_test_and_training_data(self, test_train_split=.9):
+        igv = get_indexed_global_vector()
+
+        print('getting articles... ', end='', flush=True)
+        easy_texts_list = [article[0] for article in time_get_str(False)]
+        hard_texts_list = [article[0] for article in time_get_str(True)]
+        print(len(easy_texts_list), len(hard_texts_list))
+
+        # splits texts up into short, normal, and long groups randomly
+        random.shuffle(easy_texts_list)
+        random.shuffle(hard_texts_list)
+        
+        test_amount = int(min(len(easy_texts_list), len(hard_texts_list))*(1-test_train_split))
+        easy_texts_list_test = easy_texts_list[:test_amount]
+        hard_texts_list_test = hard_texts_list[:test_amount]
+
+        easy_texts_list = easy_texts_list[test_amount:]
+        hard_texts_list = hard_texts_list[test_amount:]
+
+        short_amount = int(len(easy_texts_list)/6.2/5)
+        normal_amount = int(len(easy_texts_list)/6.2)
+
+        easy_short_texts_list = easy_texts_list[:short_amount]
+        easy_normal_texts_list = easy_texts_list[short_amount:short_amount+normal_amount]
+        easy_long_texts_list = easy_texts_list[short_amount+normal_amount:]
+
+        short_amount = int(len(hard_texts_list)/6.2/5)
+        normal_amount = int(len(hard_texts_list)/6.2)
+
+        hard_short_texts_list = hard_texts_list[:short_amount]
+        hard_normal_texts_list = hard_texts_list[short_amount:short_amount+normal_amount]
+        hard_long_texts_list = hard_texts_list[short_amount+normal_amount:]
+        
+        easy_texts_list = []
+        hard_texts_list = []
+
+        # process short texts
+        for text in easy_short_texts_list:
+            parts = random.randint(3, 8)
+            word_list = nltk.word_tokenize(text)
+
+            i = 0
+            for part in range(1, parts + 1):
+                j = int(part/parts*len(word_list))
+                easy_texts_list.append(relative_frequency_vector(' '.join(word_list[i:j])))
+                i = j
+
+
+        for text in hard_short_texts_list:
+            parts = random.randint(3, 8)
+            word_list = nltk.word_tokenize(text)
+
+            i = 0
+            for part in range(1, parts + 1):
+                j = int(part/parts*len(word_list))
+                hard_texts_list.append(relative_frequency_vector(' '.join(word_list[i:j])))
+                i = j
+
+
+        # process normal texts
+        easy_texts_list.extend([relative_frequency_vector(text) for text in easy_normal_texts_list])
+        hard_texts_list.extend([relative_frequency_vector(text) for text in hard_normal_texts_list])
+
+        # process long texts
+        index = 0
+        while index < len(easy_long_texts_list):
+            jndex = index + random.randint(2, 8)
+            text_string = '\n'.join(easy_long_texts_list[index:jndex])
+            easy_texts_list.append(relative_frequency_vector(text_string))
+            index = jndex
+
+        index = 0
+        while index < len(hard_long_texts_list):
+            jndex = index + random.randint(2, 8)
+            text_string = '\n'.join(hard_long_texts_list[index:jndex])
+            hard_texts_list.append(relative_frequency_vector(text_string))
+            index = jndex
+        
+        print("done")
+
+        # create the vectors
+        random.shuffle(easy_texts_list)
+        random.shuffle(hard_texts_list)
+        random.shuffle(easy_texts_list_test)
+        random.shuffle(hard_texts_list_test)
+
+        sgd_vectors_list = []
+        training_results_list = []
+
+        test_vectors_list = []
+        test_results_list = []
+
+        for easy_text, hard_text in zip(easy_texts_list, hard_texts_list):
+            
+
+            sgd_vectors_list.append(self.prepare_for_svm(easy_text, hard_text, igv))
+            training_results_list.append(-1)  
+
+            sgd_vectors_list.append(self.prepare_for_svm(hard_text, easy_text, igv))
+            training_results_list.append(1)
+
+        easy_texts_list_test = [relative_frequency_vector(a) for a in easy_texts_list_test]
+        hard_texts_list_test = [relative_frequency_vector(a) for a in hard_texts_list_test]
+
+        for easy_texts_test, hard_texts_test in zip(easy_texts_list_test, hard_texts_list_test):
+
+
+            test_vectors_list.append(self.prepare_for_svm(easy_texts_test, hard_texts_test, igv))
+            test_results_list.append(-1)
+
+            test_vectors_list.append(self.prepare_for_svm(hard_texts_test, easy_texts_test, igv))
+            test_results_list.append(1)
+        
+        return np.asarray(sgd_vectors_list), np.asarray(training_results_list), np.asarray(test_vectors_list), np.asarray(test_results_list)
+            
+
 
 class ReturnConcatenationVectorizer(ConcatenationVectorizer, ReturnVectorizer):  # multiple inheritance!!!!
     pass
@@ -397,6 +512,9 @@ class ReturnSubtractionVectorizer(SubtractionVectorizer, ReturnVectorizer):
 class YieldSubtractionVectorizer(SubtractionVectorizer, YieldVectorizer):
     pass
 
+
+class VariedLengthYieldSubtractionVectorizer(SubtractionVectorizer, VariedLengthYieldVectorizer):
+    pass
 
 # temporary functions to make fv.txt conform with text preprocessing:
 

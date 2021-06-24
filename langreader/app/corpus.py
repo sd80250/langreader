@@ -13,48 +13,66 @@ import langreader.sort.svm as svm
 from bs4 import BeautifulSoup
 import requests
 
+from gutenberg.acquire import load_etext
+from gutenberg.query import get_metadata
+from gutenberg.cleanup import strip_headers
 
 # --get methods--
 def get_corpus_length(language='english'):
     c.execute('SELECT COUNT(order_string) FROM Repository WHERE language = ?', (language,))
+    # c.execute('SELECT COUNT(order_string) FROM Repository WHERE language = ? AND text_type = "gutenberg"', (language,))
     print('get_corpus_length')
     return c.fetchone()[0]
 
 
 def get_text_from_index(index):
-    print('SELECT article_text, article_url from Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ' + str(index))
-    c.execute('SELECT article_text, article_url from Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    print('get_text_from_index')
+    c.execute('SELECT article_text, article_url, text_type FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    # c.execute('SELECT article_text, article_url, text_type FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    print('get_text_from_index', end=' ', flush=True)
     result = c.fetchone()
     # 0 is the text
     # 1 is the url
-    if c.fetchone()[0] is None:
-        page = requests.get(c.fetchone[1])
+    # 2 is the text type
+
+    if result[2] == 'gutenberg':
+        print(result[1])
+        return strip_headers(load_etext(int(result[1]))).strip()
+    
+    if result[0] is None:
+        print(result[1])
+        page = requests.get(result[1])
         soup = BeautifulSoup(page.content, 'html.parser')
         return soup.get_text()
-    return c.fetchone()[0]
+
+    print()
+    
+    return result[0]
 
 
 def get_title_from_index(index):
-    c.execute('SELECT article_title from Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    c.execute('SELECT article_title FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    # c.execute('SELECT article_title FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
     print('get_title_from_index')
     return c.fetchone()[0]
 
 
 def get_all_from_index(index):
-    c.execute('SELECT * from Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    # c.execute('SELECT * FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    c.execute('SELECT * FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
     print('get_all_from_index')
     return c.fetchone()
 
 
 def get_order_string_from_index(index):
-    c.execute('SELECT order_string from Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    # c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
     print('get_order_string_from_index')
     return c.fetchone()[0]
 
 
 def get_two_order_strings_from_index(index):
-    c.execute('SELECT order_string from Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 2 OFFSET ?', (index-1,))
+    c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 2 OFFSET ?', (index-1,))
+    # c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 2 OFFSET ?', (index-1,))
     print('get_two_order_strings_from_index')
     return [i[0] for i in c.fetchall()]
 
@@ -66,25 +84,61 @@ def get_text(text_order_index):
 
 def get_order_strings():
     c.execute('SELECT order_string FROM Repository ORDER BY order_string')
+    # c.execute('SELECT order_string FROM Repository WHERE text_type = "gutenberg" ORDER BY order_string')
     return [i[0] for i in c.fetchall()]
 
 
 # --insert methods--
-def insert_with_order_string(article_title, article_text, order_string, article_url=None, article_author=None, language='english'):
+def insert_with_order_string(article_title, article_text, order_string, article_url=None, article_author=None, language='english', text_type=None):
     if not article_url and not article_author:
-        c.execute('INSERT INTO Repository(article_title, article_text, order_string, language) VALUES (?, ?, ?, ?)', (article_title, article_text, order_string, language))
+        c.execute('INSERT OR IGNORE INTO Repository(article_title, article_text, order_string, language, text_type) VALUES (?, ?, ?, ?, ?)', (article_title, article_text, order_string, language, text_type))
     else:
-        c.execute('INSERT INTO Repository(article_title, article_text, order_string, article_url, article_author, language) VALUES (?, ?, ?, ?, ?, ?)', (article_title, article_text, order_string, article_url, article_author, language))
+        c.execute('INSERT OR IGNORE INTO Repository(article_title, article_text, order_string, article_url, article_author, language, text_type) VALUES (?, ?, ?, ?, ?, ?, ?)', (article_title, article_text, order_string, article_url, article_author, language, text_type))
     print('insert_with_order_string')
-    conn.commit()
+    # THIS METHOD DOES NOT COMMIT BY ITSELF; A SEPARATE CALL TO conn.commit() IS REQUIRED
 
 
 # --sorting methods--
-def insert_in_corpus(title, text, k_max, language='english', url=None, author=None, exclude_text=False):
-    insert_at_index(title, text, bin_search_corpus(text, k_max, language), language=language, url=url, author=author, exclude_text=exclude_text)
+def reindex(): # unfinished
+    c.execute('SELECT article_id FROM Repository WHERE order_string IS NOT NULL ORDER BY order_string')
+    article_ids = [i[0] for i in c.fetchall()]
+
+    for article_id, index in zip(article_ids, get_equally_spaced_indices(len(article_ids))):
+        c.execute('UPDATE Repository SET order_string = ? WHERE article_id = ?', (index, article_id))
+    
+    conn.commit()
+    
+
+def get_equally_spaced_indices(corpus_length):
+    # find the nearest maximum number of values that strings of max length n can represent
+    letters_length = 1
+    number_of_values = 26
+    while number_of_values < corpus_length + 1:
+        letters_length += 1 
+        number_of_values = 27**letters_length - 27**(letters_length-1)
+    
+    # do integer division
+    indices = []
+    a_value = 27**(letters_length-1)
+    for i in range(1, corpus_length + 1):
+        indices.append(convert_from_base_27(int(number_of_values / (corpus_length + 1) * i) + a_value))
+    return indices
 
 
-def insert_at_index(title, text, index, language='english', url=None, author=None, exclude_text=False):
+def insert_texts(texts_list, exclude_text=False, index=0): # should be list of tuples length 10
+    index_real = index
+    for article_id, title, text, url, date_time_added, publisher_name, order_string, language, added_by, author in texts_list:
+        insert_in_corpus(title, text, 2, language=language, url=url, author=author, exclude_text=False)
+        print(index_real)
+        index_real += 1
+    conn.commit()
+
+
+def insert_in_corpus(title, text, k_max, language='english', url=None, author=None, exclude_text=False, text_type=None):
+    insert_at_index(title, text, bin_search_corpus(text, k_max, language), language=language, url=url, author=author, exclude_text=exclude_text, text_type=text_type)
+
+
+def insert_at_index(title, text, index, language='english', url=None, author=None, exclude_text=False, text_type=None):
     corpus_length = get_corpus_length()
     if corpus_length == 0:
         insert_with_order_string(text, 'm')
@@ -107,7 +161,7 @@ def insert_at_index(title, text, index, language='english', url=None, author=Non
             actual_text = None
         else:
             actual_text = text
-        insert_with_order_string(title, actual_text, find_middle_index(bottom_order, top_order), article_url=url, article_author=author, language=language)
+        insert_with_order_string(title, actual_text, find_middle_index(bottom_order, top_order), article_url=url, article_author=author, language=language, text_type=text_type)
 
 
 def find_middle_index(index1, index2): # index1 and index2 are strings!!
@@ -129,6 +183,7 @@ def bin_search_corpus(text, k_max, language='english'):
     top = get_corpus_length(language=language) - 1
     middle = (top + bottom) // 2
     k = k_max
+    rfv_text = v.relative_frequency_vector(text)
     
     while top >= bottom:
         # if k is too big, which would make the index i out of bounds, then set k to the maximum
@@ -137,7 +192,7 @@ def bin_search_corpus(text, k_max, language='english'):
             k = (top - bottom) // 2
         difficult_texts = 0 
         for i in range(middle - k, middle + k + 1):
-            if compare(text, get_text_from_index(i)) < 0:
+            if compare(rfv_text, v.relative_frequency_vector(get_text_from_index(i))) < 0:
                 difficult_texts += 1
         if difficult_texts > k: 
             top = middle - 1
@@ -145,15 +200,29 @@ def bin_search_corpus(text, k_max, language='english'):
             bottom = middle + 1
         middle = (top + bottom) // 2
     
-    print('result: ' + str(bottom))
+    # print('result: ' + str(bottom))
     return bottom
 
 
-def compare(text1, text2):
-    return svm.compare(text1, text2)
+def compare(rfv_text1, rfv_text2):
+    return svm.compare(rfv_text1, rfv_text2)
 
 
 # --helper methods--
+def find_gutenberg_url(ebook_code):
+    url_list = get_metadata('formaturi', ebook_code)
+    url = [s for s in url_list if ".html.images" in s]
+    if len(url) == 0:
+        url = [s for s in url_list if ".html" in s]
+    if len(url) == 0:
+        url = [s for s in url_list if ".htm" in s]
+    print(url, end=' ', flush=True)
+    if len(url) == 0:
+        # print(get_metadata('formaturi', ebook_code), end=' ')
+        raise NameError('no html files found')
+    return url[0]
+
+
 def convert_from_base_27(integer):
     string = ''
     real_integer = integer

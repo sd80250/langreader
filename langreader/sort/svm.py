@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, "")
+
 import numpy as np
 import langreader.sort.vectorize as v
 from sklearn.svm import SVC
@@ -11,25 +15,27 @@ svm_model = None
 indexed_global_vector = None
 vectorizer = None
 
-def make_and_test_model(pairs_of_test_data, name='langreader/sort/resources/svm_model.p', samples=1000):
+def make_and_test_model(pairs_of_test_data, name='langreader/sort/resources/svm_model_varied_size.p', samples=270):
     # get training data
     print("making training data:", flush=True)
-    vectorizer = v.YieldSubtractionVectorizer()
-    XTrain, yTrain, XTest, yTest = None, None, None, None
-    for X_train, y_train, X_test, y_test in vectorizer.make_test_and_training_data(pairs_of_test_data):
-        if XTrain is None:
-            XTrain = X_train
-            yTrain = y_train
-            XTest = X_test
-            yTest = y_test
-        else:
-            XTrain = np.append(XTrain, X_train, axis=0)
-            yTrain = np.append(yTrain, y_train, axis=0)
-            XTest = np.append(XTest, X_test, axis=0)
-            yTest = np.append(yTest, y_test, axis=0)
-        print(XTrain.shape, yTrain.shape, XTest.shape, yTest.shape)
-        if (yTrain.size > samples):
-            break
+    vectorizer = v.VariedLengthYieldSubtractionVectorizer()
+    XTrain, yTrain, XTest, yTest = vectorizer.make_test_and_training_data()
+    print(XTrain.shape, yTrain.shape, XTest.shape, yTest.shape, end=' ')
+    # XTrain, yTrain, XTest, yTest = None, None, None, None
+    # for X_train, y_train, X_test, y_test in vectorizer.make_test_and_training_data(pairs_of_test_data):
+    #     if XTrain is None:
+    #         XTrain = X_train
+    #         yTrain = y_train
+    #         XTest = X_test
+    #         yTest = y_test
+    #     else:
+    #         XTrain = np.append(XTrain, X_train, axis=0)
+    #         yTrain = np.append(yTrain, y_train, axis=0)
+    #         XTest = np.append(XTest, X_test, axis=0)
+    #         yTest = np.append(yTest, y_test, axis=0)
+    #     print(XTrain.shape, yTrain.shape, XTest.shape, yTest.shape)
+    #     if (yTrain.size > samples):
+    #         break
     print("done making training data")
 
     # # split data into training and test data
@@ -157,7 +163,7 @@ def load_model(file_path):
     return pickle.load(open(file_path, 'rb'))
 
 
-def compare(text1, text2, file_path='langreader/sort/resources/svm_model.p'):
+def compare(rfv_text1, rfv_text2, file_path='langreader/sort/resources/svm_model.p'):
     global svm_model
     global indexed_global_vector
     global vectorizer
@@ -169,8 +175,8 @@ def compare(text1, text2, file_path='langreader/sort/resources/svm_model.p'):
     if not vectorizer:
         vectorizer = v.ReturnSubtractionVectorizer()
     
-    return svm_model.predict(np.asarray(vectorizer.prepare_for_svm(v.relative_frequency_vector(text1), v.relative_frequency_vector(text2), indexed_global_vector)).reshape((1, -1)))
+    return svm_model.predict(np.asarray(vectorizer.prepare_for_svm(rfv_text1, rfv_text2, indexed_global_vector)).reshape((1, -1)))
 
 
 if __name__ == "__main__":
-    make_and_test_model(563)
+    make_and_test_model(270)
