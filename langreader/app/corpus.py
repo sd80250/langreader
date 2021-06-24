@@ -57,8 +57,8 @@ def get_title_from_index(index):
 
 
 def get_all_from_index(index):
-    # c.execute('SELECT * FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    c.execute('SELECT * FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    c.execute('SELECT * FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+    # c.execute('SELECT * FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
     print('get_all_from_index')
     return c.fetchone()
 
