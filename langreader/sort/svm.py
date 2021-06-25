@@ -16,10 +16,13 @@ indexed_global_vector = None
 vectorizer = None
 
 def make_and_test_model(pairs_of_test_data, name='langreader/sort/resources/svm_model_varied_size.p', samples=270):
+    #TODO: scrape new texts for training/testing
     # get training data
     print("making training data:", flush=True)
-    vectorizer = v.VariedLengthYieldSubtractionVectorizer()
-    XTrain, yTrain, XTest, yTest = vectorizer.make_test_and_training_data()
+    vectorizer = v.ReturnSubtractionWithNewCharacteristicsVectorizer()
+    X, y = vectorizer.make_test_and_training_data()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.10)
+
     print(XTrain.shape, yTrain.shape, XTest.shape, yTest.shape, end=' ')
     # XTrain, yTrain, XTest, yTest = None, None, None, None
     # for X_train, y_train, X_test, y_test in vectorizer.make_test_and_training_data(pairs_of_test_data):
@@ -38,14 +41,9 @@ def make_and_test_model(pairs_of_test_data, name='langreader/sort/resources/svm_
     #         break
     print("done making training data")
 
-    # # split data into training and test data
-    # print("spliting training data... ", end='', flush=True)
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.20)
-    # print("done")
-
     # make the svm go
     print("training svm:", flush=True)
-    svm = train_on_kernel('rbf', XTrain, XTest, yTrain, yTest)
+    svm = train_on_kernel('rbf', X_train, X_test, y_train, y_test)
     print("done training svm")
 
     # store svm onto a binary file using pickle
