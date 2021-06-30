@@ -17,6 +17,7 @@ sys.path.insert(0, "")
 
 import langreader.app.corpus as corpus
 import pickle
+import trafilatura
 
 
 # soup is the html (but transformed into a python-manipulatable object)
@@ -171,6 +172,7 @@ def scrape_christian_texts():
     corpus.conn.commit()
     print('changes committed')
 
+
 # --scraping Spanish texts--
 def try_scraping_spanish_site():
     chrome_options = Options()
@@ -231,5 +233,118 @@ def try_scraping_spanish_site():
     # browser.launch_browser()
 
 
+# --scraping americanliterature.com--
+def scrape_short_stories():
+    # get urls to short stories
+    short_stories_for_children = [link.get("href") for link in get_soup_from_URL("https://americanliterature.com/short-stories-for-children").select("a") if 'figcaption' in [child.name for child in link.children] and link.get("href")[:8] != "/author/"] 
+
+    links = set()
+    links.update(set(short_stories_for_children))
+    for page in range(1, 16):
+        links.update(set([link.get("href") for link in get_soup_from_URL("https://americanliterature.com/short-story-library?page=" + str(page)).select(".col-md-4 a")]))
+        print("scraped page", page, end='\r', flush=True)
+    
+    short_stories_list = set()
+
+    for link in links:
+        try:
+            url = "https://americanliterature.com" + link
+            soup = get_soup_from_URL(url)
+            text_jumbotron = soup.find("div", class_="jumbotron")
+
+            # finds the indices where the hr (horizontal bar) tags are located
+            index = 0
+            tag_indices = [] # strictly increasing
+            for tag in text_jumbotron.contents:
+                if tag.name == 'hr':
+                    tag_indices.append(index)
+                index += 1
+
+            if len(tag_indices) < 2:
+                print("not enough hr tags")
+                continue
+            
+            # finds the two tags with the most content between them, and calls those the text dividing tags
+            initial_hr = 0
+            for i in range(1, len(tag_indices) - 1):
+                if tag_indices[i + 1] - tag_indices[i] > tag_indices[initial_hr + 1] - tag_indices[initial_hr]:
+                    initial_hr = i
+        except:
+            print('something was wrong near the beginning')
+            continue
+        
+        # combine values between hr tags into a soup object, and gets the text
+        try:
+            text = "\n\n".join([text_jumbotron.contents[i].get_text() for i in range(tag_indices[initial_hr] + 1, tag_indices[initial_hr + 1])])
+        
+            if len(text.split()) > 3000:
+                print("short story not short enough")
+                continue
+        except:
+            print('something was wrong with the text jumbotron')
+            continue
+        
+        # get title of short story
+        try:
+            title = None
+            author = None
+            title = text_jumbotron.find("cite").get_text()
+            author = text_jumbotron.find("h3").get_text()[3:] # this slice removes the 'by ' part of the author line
+            if not title or not author:
+                print('title/author not found')
+                continue
+        except:
+            print('something was wrong with the title/author')
+            continue
+        
+        # puts short story in the repository
+        params = (None, title, text, url, None, 'americanliterature.com', None, 'english', 1, author, 'short_story')
+        short_stories_list.add(params)
+        print('added short story', len(short_stories_list))
+    
+    pickle.dump(short_stories_list, open('langreader/scrape/jic.p', 'wb'))
+    corpus.insert_texts(short_stories_list, 'ShortStoryRepository')
+
+
+def scrape_news_site(url_list):
+    article_list = []
+    for url in url_list:
+
+        r = requests.get(url)
+        soup = BeautifulSoup(r.content, features='xml')
+
+        articles = soup.findAll('item')
+
+        for a in articles:
+            title = a.find('title')
+            if title:
+                title = title.text
+            print(title, flush=True)
+            link = a.find('link')
+            if link:
+                link = link.text
+            else:
+                continue
+            print(link, flush=True)
+            published = a.find('pubDate')
+            if published:
+                published = published.text
+            description = a.find('description')
+            if description:
+                description = description.text
+
+            downloaded = trafilatura.fetch_url(link)
+            text = trafilatura.extract(downloaded)
+            print('text recieved', flush=True)
+
+            article = (None, title, text, link, None, None, None, 'english', 1, None, 'news')
+            article_list.append(article)
+    
+    return article_list
+
 if __name__ == '__main__':
-    scrape_christian_texts()
+    for i in scrape_news_site(['http://feeds.bbci.co.uk/news/rss.xml']):
+        print(i['title'])
+        print(i['link'])
+        print(i['text'])
+    

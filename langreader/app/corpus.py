@@ -17,94 +17,63 @@ from gutenberg.acquire import load_etext
 from gutenberg.query import get_metadata
 from gutenberg.cleanup import strip_headers
 
+import langreader.sort.vectorize as v
+
+order_strings = None
+corpus_length = -1
 # --get methods--
-def get_corpus_length(language='english'):
-    c.execute('SELECT COUNT(order_string) FROM Repository WHERE language = ?', (language,))
-    # c.execute('SELECT COUNT(order_string) FROM Repository WHERE language = ? AND text_type = "gutenberg"', (language,))
+
+# returns an integer of the number of rows with an order_string
+def get_corpus_length(text_type, language='english'):
+    c.execute('SELECT COUNT(order_string) FROM Repository WHERE language = ? AND text_type = ? ', (language, text_type))
     print('get_corpus_length')
     return c.fetchone()[0]
 
 
-def get_text_from_index(index):
-    c.execute('SELECT article_text, article_url, text_type FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    # c.execute('SELECT article_text, article_url, text_type FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    print('get_text_from_index', end=' ', flush=True)
-    result = c.fetchone()
-    # 0 is the text
-    # 1 is the url
-    # 2 is the text type
-
-    if result[2] == 'gutenberg':
-        print(result[1])
-        return strip_headers(load_etext(int(result[1]))).strip()
-    
-    if result[0] is None:
-        print(result[1])
-        page = requests.get(result[1])
-        soup = BeautifulSoup(page.content, 'html.parser')
-        return soup.get_text()
-
-    print()
-    
-    return result[0]
-
-
-def get_title_from_index(index):
-    c.execute('SELECT article_title FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    # c.execute('SELECT article_title FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    print('get_title_from_index')
-    return c.fetchone()[0]
-
-
-def get_all_from_index(index):
-    c.execute('SELECT * FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    # c.execute('SELECT * FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
+# returns a tuple of the index in question
+def get_all_from_index(text_type, index, language='english'):
+    c.execute('SELECT * FROM Repository WHERE language = ? AND text_type = ? AND order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (language, text_type, index))
     print('get_all_from_index')
     return c.fetchone()
 
 
-def get_order_string_from_index(index):
-    c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    # c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 1 OFFSET ?', (index,))
-    print('get_order_string_from_index')
-    return c.fetchone()[0]
+# returns a tuple of the order_string in question (faster this way)
+def get_all(text_type, order_string, language='english'):
+    c.execute('SELECT * FROM Repository WHERE language = ? AND text_type = ? AND order_string = ?', (language, text_type, order_string))
+    # print('get_all')
+    return c.fetchone()
 
 
-def get_two_order_strings_from_index(index):
-    c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null ORDER BY order_string LIMIT 2 OFFSET ?', (index-1,))
-    # c.execute('SELECT order_string FROM Repository WHERE order_string IS NOT null AND text_type = "gutenberg" ORDER BY order_string LIMIT 2 OFFSET ?', (index-1,))
-    print('get_two_order_strings_from_index')
-    return [i[0] for i in c.fetchall()]
-
-
-def get_text(text_order_index):
-    c.execute('SELECT article_text FROM Repository WHERE order_string = ?', (text_order_index,))
-    return c.fetchone()[0]
-
-
-def get_order_strings():
-    c.execute('SELECT order_string FROM Repository ORDER BY order_string')
-    # c.execute('SELECT order_string FROM Repository WHERE text_type = "gutenberg" ORDER BY order_string')
+# returns a list of order strings in order (convert index to order_string)
+def get_order_strings(text_type, language='english'):
+    c.execute('SELECT order_string FROM Repository WHERE language = ? AND text_type = ? ORDER BY order_string', (language, text_type))
+    print('get_order_strings')
     return [i[0] for i in c.fetchall()]
 
 
 # --insert methods--
-def insert_with_order_string(article_title, article_text, order_string, article_url=None, article_author=None, language='english', text_type=None):
-    if not article_url and not article_author:
-        c.execute('INSERT OR IGNORE INTO Repository(article_title, article_text, order_string, language, text_type) VALUES (?, ?, ?, ?, ?)', (article_title, article_text, order_string, language, text_type))
-    else:
-        c.execute('INSERT OR IGNORE INTO Repository(article_title, article_text, order_string, article_url, article_author, language, text_type) VALUES (?, ?, ?, ?, ?, ?, ?)', (article_title, article_text, order_string, article_url, article_author, language, text_type))
-    print('insert_with_order_string')
-    # THIS METHOD DOES NOT COMMIT BY ITSELF; A SEPARATE CALL TO conn.commit() IS REQUIRED
+
+# values should be an 11-tuple
+# THIS METHOD DOES NOT COMMIT BY ITSELF; A SEPARATE CALL TO conn.commit() IS REQUIRED
+def insert(values): # returns true if command executed successfully; else returns false
+    values_modified = (values[1], values[2], values[3], values[5], \
+        values[6], values[7], values[8], values[9], values[10])
+    try:
+        c.execute('INSERT INTO Repository VALUES (null, ?, ?, ?, datetime("now"), ?, ?, ?, ?, ?, ?)', values_modified)
+        return True
+    except Exception:
+        print('insert failed:', repr(Exception))
+        return False
+    # print('insert')
 
 
 # --sorting methods--
-def reindex(): # unfinished
-    c.execute('SELECT article_id FROM Repository WHERE order_string IS NOT NULL ORDER BY order_string')
+def reindex(text_type): # unfinished
+    c.execute('SELECT article_id FROM Repository WHERE order_string IS NOT NULL AND text_type = ? ORDER BY order_string', (text_type,))
     article_ids = [i[0] for i in c.fetchall()]
 
     for article_id, index in zip(article_ids, get_equally_spaced_indices(len(article_ids))):
-        c.execute('UPDATE Repository SET order_string = ? WHERE article_id = ?', (index, article_id))
+        c.execute('UPDATE Repository SET order_string = ? WHERE article_id = ? AND text_type = ?', (index, article_id, text_type))
     
     conn.commit()
     
@@ -125,43 +94,69 @@ def get_equally_spaced_indices(corpus_length):
     return indices
 
 
-def insert_texts(texts_list, exclude_text=False, index=0): # should be list of tuples length 10
+# ALL TEXTS SHOULD BE OF THE SAME TEXT TYPE
+def insert_texts(texts_list, text_type, exclude_text=False, index=0): # should be an iterable of lists length 11
+    global order_strings
+    order_strings = get_order_strings(text_type)
+    global corpus_length
+    corpus_length = get_corpus_length(text_type)
+
     index_real = index
-    for article_id, title, text, url, date_time_added, publisher_name, order_string, language, added_by, author in texts_list:
-        insert_in_corpus(title, text, 2, language=language, url=url, author=author, exclude_text=False)
-        print(index_real)
+    for parameters in texts_list:
         index_real += 1
+        print('inserting', text_type + ":", index_real, flush=True)
+        insert_in_corpus(parameters, 2, exclude_text=exclude_text)
+    print('done\n')
     conn.commit()
 
 
-def insert_in_corpus(title, text, k_max, language='english', url=None, author=None, exclude_text=False, text_type=None):
-    insert_at_index(title, text, bin_search_corpus(text, k_max, language), language=language, url=url, author=author, exclude_text=exclude_text, text_type=text_type)
+# order_strings AND corpus_length SHOULD BE SET BEFORE THIS METHOD IS CALLED!
+# THIS METHOD DOES NOT COMMIT BY ITSELF; A SEPARATE CALL TO conn.commit() IS REQUIRED
+def insert_in_corpus(parameters, k_max, exclude_text=False):
+    # 2 > article_text; 10 > text_type
+    insert_at_index(parameters, bin_search_corpus(parameters[2], k_max, parameters[10]), exclude_text=exclude_text)
 
 
-def insert_at_index(title, text, index, language='english', url=None, author=None, exclude_text=False, text_type=None):
-    corpus_length = get_corpus_length()
+# order_strings AND corpus_length SHOULD BE SET BEFORE THIS METHOD IS CALLED!
+# THIS METHOD DOES NOT COMMIT BY ITSELF; A SEPARATE CALL TO conn.commit() IS REQUIRED
+def insert_at_index(parameters, index, exclude_text=False):
+    global order_strings
+    global corpus_length
     if corpus_length == 0:
-        insert_with_order_string(text, 'm')
+        parameters[6] = 'm' # 6 > order_string
+        if insert(parameters):
+            order_strings = ['m']
+            corpus_length = len(order_strings)
     else:
-        bottom_order = ''
-        top_order = ''
-
+        # EXAMPLE:
+        #  0 1 2 3 4
+        # ^
+        # if index == 0, I would want to insert text there
+        #  0 1 2 3 4
+        #           ^
+        # if index == 5, I would want to insert text there
+        #  0 1 2 3 4
+        #   ^
+        # if index == 1, I would want to insert text there
         if index == 0:
             bottom_order = 'a'
-            top_order = get_order_string_from_index(index)     
+            top_order = order_strings[index]     
         elif index == corpus_length:
-            bottom_order = get_order_string_from_index(index - 1)
+            bottom_order = order_strings[index-1]
             top_order = 'z' * len(bottom_order)
         else:
-            order_strings = get_two_order_strings_from_index(index)
-            bottom_order = order_strings[0]
-            top_order = order_strings[1]
+            bottom_order = order_strings[index-1]
+            top_order = order_strings[index]
+        
+        new_string = find_middle_index(bottom_order, top_order)
+        parameters[6] = new_string # 6 > order_string
         
         if exclude_text:
-            actual_text = None
-        else:
-            actual_text = text
-        insert_with_order_string(title, actual_text, find_middle_index(bottom_order, top_order), article_url=url, article_author=author, language=language, text_type=text_type)
+            parameters[2] = None # 2 > article_text
+
+        if insert(parameters):
+            order_strings.insert(index, new_string)
+            corpus_length = len(order_strings)
 
 
 def find_middle_index(index1, index2): # index1 and index2 are strings!!
@@ -178,9 +173,13 @@ def find_middle_index(index1, index2): # index1 and index2 are strings!!
     return convert_from_base_27((integer1 + integer2) // 2)
 
 
-def bin_search_corpus(text, k_max, language='english'):
+# order_strings AND corpus_length SHOULD BE SET BEFORE THIS METHOD IS CALLED!
+def bin_search_corpus(text, k_max, text_type, language='english'):
+    global order_strings
+    global corpus_length
+
     bottom = 0
-    top = get_corpus_length(language=language) - 1
+    top = corpus_length - 1
     middle = (top + bottom) // 2
     k = k_max
     rfv_text = v.relative_frequency_vector(text)
@@ -192,7 +191,7 @@ def bin_search_corpus(text, k_max, language='english'):
             k = (top - bottom) // 2
         difficult_texts = 0 
         for i in range(middle - k, middle + k + 1):
-            if compare(rfv_text, v.relative_frequency_vector(get_text_from_index(i))) < 0:
+            if compare(rfv_text, v.relative_frequency_vector(get_all(text_type, order_strings[i])[2])) < 0: # 2 > article_text
                 difficult_texts += 1
         if difficult_texts > k: 
             top = middle - 1
@@ -264,11 +263,11 @@ def value_letter(integer):
 
 # --temporary methods--
 # remove all the whitespace from the poem titles
-def update_titles():
-    c.execute('SELECT article_title FROM Repository')
+def update_titles(text_type):
+    c.execute('SELECT article_title FROM Repository WHERE text_type = ?', (text_type,))
     titles_list = c.fetchall()
 
-    c.executemany('UPDATE Repository SET article_title = ? WHERE article_title = ?', [(title[0].strip(),title[0]) for title in titles_list])
+    c.executemany('UPDATE Repository SET article_title = ? WHERE article_title = ? AND text_type = ?', [(title[0].strip(),title[0], text_type) for title in titles_list])
     conn.commit()
 
 
