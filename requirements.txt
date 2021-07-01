@@ -12,7 +12,6 @@ beautifulsoup4==4.9.3
 bleach==3.3.0
 blinker==1.4
 bs4==0.0.1
-bsddb3==6.2.9
 cachetools==4.2.2
 certifi==2021.5.30
 cffi==1.14.5
