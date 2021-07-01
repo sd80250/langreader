@@ -46,7 +46,7 @@ def initialization():
 
 def main():
     global ss
-    st.title("Reader App")
+    st.title("Reader App Demo")
 
     if not ss.loggedIn:
         menu = ["Home", "Login", "Signup"]
