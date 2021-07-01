@@ -5,6 +5,7 @@ import session
 import sqlite3
 import random
 import corpus
+from dictionary import find_def
 
 # DB Management
 conn1 = sqlite3.connect("resources/sqlite/corpus.sqlite")
@@ -46,6 +47,17 @@ def initialization():
 
 def main():
     global ss
+    st.markdown(
+            f"""
+    <style>
+        .reportview-container .main .block-container{{
+            max-width: 70%;
+        }}
+    </style>
+    """,
+            unsafe_allow_html=True,
+        )
+
     st.title("Reader App Demo")
 
     if not ss.loggedIn:
@@ -231,6 +243,7 @@ def run_application():
     if ss.params[9]: # 9 > article_author
         st.markdown("*by " + ss.params[9] + "*")
     if not ss.params[2]: # 2 > article_text
+        print("Param 3: ", ss.params[3])
         st.write(f'<iframe src="' + ss.params[3] + '" height="900" width="800"></iframe>', unsafe_allow_html=True)
     else:
         if ss.params[3]: # 3 > article_url
@@ -239,7 +252,23 @@ def run_application():
         #     st.code(ss.params[2], language="")
         # else:
         #     st.write(ss.params[2])
-        st.write(ss.params[2])
+
+        # dictionary feature
+        col_text, col_controls = st.beta_columns((3,2))
+        with col_text:
+            st.write(ss.params[2])
+        with col_controls:
+            dictionary_expander = st.beta_expander(label = "Dictionary", expanded = True)
+            with dictionary_expander:
+                word = st.text_input("Get the definition of an unfamiliar word")
+                if word:
+                    try:
+                        word_text = find_def(word)
+                        if not word_text:
+                            word_text = """Error: Unable to get word's definition"""
+                    except Exception:
+                        word_text = """Error: Unable to get word's definition"""
+                    st.markdown(word_text)
 
     with st.form('hi'):
         difficulty = st.select_slider(
