@@ -58,7 +58,7 @@ def main():
             unsafe_allow_html=True,
         )
 
-    st.title("Reader App Demo")
+    st.title("Project READ Demo")
 
     if not ss.loggedIn:
         menu = ["Home", "Login", "Signup"]
