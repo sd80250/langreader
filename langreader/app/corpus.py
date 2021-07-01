@@ -13,9 +13,9 @@ import langreader.sort.svm as svm
 from bs4 import BeautifulSoup
 import requests
 
-from gutenberg.acquire import load_etext
-from gutenberg.query import get_metadata
-from gutenberg.cleanup import strip_headers
+# from gutenberg.acquire import load_etext
+# from gutenberg.query import get_metadata
+# from gutenberg.cleanup import strip_headers
 
 import langreader.sort.vectorize as v
 
@@ -208,18 +208,18 @@ def compare(rfv_text1, rfv_text2):
 
 
 # --helper methods--
-def find_gutenberg_url(ebook_code):
-    url_list = get_metadata('formaturi', ebook_code)
-    url = [s for s in url_list if ".html.images" in s]
-    if len(url) == 0:
-        url = [s for s in url_list if ".html" in s]
-    if len(url) == 0:
-        url = [s for s in url_list if ".htm" in s]
-    print(url, end=' ', flush=True)
-    if len(url) == 0:
-        # print(get_metadata('formaturi', ebook_code), end=' ')
-        raise NameError('no html files found')
-    return url[0]
+# def find_gutenberg_url(ebook_code):
+#     url_list = get_metadata('formaturi', ebook_code)
+#     url = [s for s in url_list if ".html.images" in s]
+#     if len(url) == 0:
+#         url = [s for s in url_list if ".html" in s]
+#     if len(url) == 0:
+#         url = [s for s in url_list if ".htm" in s]
+#     print(url, end=' ', flush=True)
+#     if len(url) == 0:
+#         # print(get_metadata('formaturi', ebook_code), end=' ')
+#         raise NameError('no html files found')
+#     return url[0]
 
 
 def convert_from_base_27(integer):
