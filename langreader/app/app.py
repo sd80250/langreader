@@ -58,7 +58,7 @@ def main():
             unsafe_allow_html=True,
         )
 
-    st.title("Project READ Demo")
+    st.title("Project READ")
 
     if not ss.loggedIn:
         menu = ["Home", "Login", "Signup"]
@@ -66,13 +66,22 @@ def main():
 
         if choice == "Home":
             st.subheader("Home")
-            st.info("You are currently not logged in. Head to the Login tab on the sidebar menu.")
         
         elif choice == "Login":
             login()
         
         elif choice == "Signup":
             signup()
+        
+        st.info("You are currently not logged in. Head to the Login tab on the sidebar menu.")
+        
+        welcome_text = """Welcome! Project READ is an up-incoming application that enables English learners to enhance their reading comprehension in a fun, relevant context. Our platform provides short written pieces tailored to a user's interests and is designed to be used in <10 minutes each day."""
+        
+        st.write(welcome_text + "\n")
+        st.write("**Diverse Corpus:** Users have access to a wide range of texts from short stories to news articles to poems.\n")
+        st.write("**ML-driven:** While users have the ability to choose texts to read independently, Project READ constantly recommends texts based on a user's current reading level.\n")
+        st.write("**Reading Aids:** Our application integrates a variety of reading tools, such as an in-platform dictionary and audio reader, to maximize the learning experience.\n")
+        
         
     else:
         menu = ["Poems", "Short Stories", "Sign Out"]
