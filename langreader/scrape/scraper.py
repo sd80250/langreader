@@ -5,11 +5,11 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-from gutenberg.acquire import load_etext
-from gutenberg.cleanup import strip_headers
-from gutenberg.query import get_etexts
-from gutenberg.query import get_metadata
-from gutenberg.acquire.text import _format_download_uri
+# from gutenberg.acquire import load_etext
+# from gutenberg.cleanup import strip_headers
+# from gutenberg.query import get_etexts
+# from gutenberg.query import get_metadata
+# from gutenberg.acquire.text import _format_download_uri
 
 import sys
 import os
@@ -20,6 +20,7 @@ import langreader.app.corpus as corpus
 import pickle
 import wikipedia
 import math
+import trafilatura
 
 
 # soup is the html (but transformed into a python-manipulatable object)
@@ -138,45 +139,46 @@ def get_times_for_kids_articles():
 
 
 # --scraping Project Gutenburg texts--
-def scrape_christian_texts():
-    # urls = set()
-    # for start_index in range(1, 177, 25):
-    #     soup = get_soup_from_URL('https://www.gutenberg.org/ebooks/bookshelf/119?start_index=' + str(start_index))
-    #     booklinks = soup.find_all('li', class_='booklink')
-    #     for booklink in booklinks:
-    #         urls.add(booklink.find('a').get('href'))
+# def scrape_christian_texts():
+#     # urls = set()
+#     # for start_index in range(1, 177, 25):
+#     #     soup = get_soup_from_URL('https://www.gutenberg.org/ebooks/bookshelf/119?start_index=' + str(start_index))
+#     #     booklinks = soup.find_all('li', class_='booklink')
+#     #     for booklink in booklinks:
+#     #         urls.add(booklink.find('a').get('href'))
 
-    urls = pickle.load(open('resources/poems/gutenberg_urls.p', 'rb'))
+#     urls = pickle.load(open('resources/poems/gutenberg_urls.p', 'rb'))
     
-    index = 0
-    for stub in urls:
-        ebook_code = int(stub[8:]) # gets rid of the initial '/ebook/' in string
-        print('index', index, 'scraping', str(ebook_code) + '...', end=' ', flush=True)
+#     index = 0
+#     for stub in urls:
+#         ebook_code = int(stub[8:]) # gets rid of the initial '/ebook/' in string
+#         print('index', index, 'scraping', str(ebook_code) + '...', end=' ', flush=True)
 
-        try:
-            # see if the book is in English
-            if 'en' not in get_metadata('language', ebook_code):
-                raise NameError('english not in language')
+#         try:
+#             # see if the book is in English
+#             if 'en' not in get_metadata('language', ebook_code):
+#                 raise NameError('english not in language')
             
-            # get text and insert the url within the corpus
-            text = strip_headers(load_etext(ebook_code)).strip()
-            title = list(get_metadata('title', ebook_code))[0]
-            author = list(get_metadata('author', ebook_code))
-            author = author[0] if len(author) > 0 else None
-            corpus.insert_in_corpus(title, text, 2, \
-                url=ebook_code, \
-                author=author, exclude_text=True, text_type='gutenberg')
-        except Exception as e:
+#             # get text and insert the url within the corpus
+#             text = strip_headers(load_etext(ebook_code)).strip()
+#             title = list(get_metadata('title', ebook_code))[0]
+#             author = list(get_metadata('author', ebook_code))
+#             author = author[0] if len(author) > 0 else None
+#             corpus.insert_in_corpus(title, text, 2, \
+#                 url=ebook_code, \
+#                 author=author, exclude_text=True, text_type='gutenberg')
+#         except Exception as e:
 
-            print(e, 'continue')
-            index += 1
-            continue
+#             print(e, 'continue')
+#             index += 1
+#             continue
         
-        print('done')
-        index += 1
+#         print('done')
+#         index += 1
 
-    corpus.conn.commit()
-    print('changes committed')
+#     corpus.conn.commit()
+#     print('changes committed')
+
 
 # --scraping Spanish texts--
 def try_scraping_spanish_site():
@@ -294,7 +296,117 @@ def scrape_wikipedia():
     
 
 
+# --scraping americanliterature.com--
+def scrape_short_stories():
+    # get urls to short stories
+    short_stories_for_children = [link.get("href") for link in get_soup_from_URL("https://americanliterature.com/short-stories-for-children").select("a") if 'figcaption' in [child.name for child in link.children] and link.get("href")[:8] != "/author/"] 
+
+    links = set()
+    links.update(set(short_stories_for_children))
+    for page in range(1, 16):
+        links.update(set([link.get("href") for link in get_soup_from_URL("https://americanliterature.com/short-story-library?page=" + str(page)).select(".col-md-4 a")]))
+        print("scraped page", page, end='\r', flush=True)
+    
+    short_stories_list = set()
+
+    for link in links:
+        try:
+            url = "https://americanliterature.com" + link
+            soup = get_soup_from_URL(url)
+            text_jumbotron = soup.find("div", class_="jumbotron")
+
+            # finds the indices where the hr (horizontal bar) tags are located
+            index = 0
+            tag_indices = [] # strictly increasing
+            for tag in text_jumbotron.contents:
+                if tag.name == 'hr':
+                    tag_indices.append(index)
+                index += 1
+
+            if len(tag_indices) < 2:
+                print("not enough hr tags")
+                continue
+            
+            # finds the two tags with the most content between them, and calls those the text dividing tags
+            initial_hr = 0
+            for i in range(1, len(tag_indices) - 1):
+                if tag_indices[i + 1] - tag_indices[i] > tag_indices[initial_hr + 1] - tag_indices[initial_hr]:
+                    initial_hr = i
+        except:
+            print('something was wrong near the beginning')
+            continue
+        
+        # combine values between hr tags into a soup object, and gets the text
+        try:
+            text = "\n\n".join([text_jumbotron.contents[i].get_text() for i in range(tag_indices[initial_hr] + 1, tag_indices[initial_hr + 1])])
+        
+            if len(text.split()) > 3000:
+                print("short story not short enough")
+                continue
+        except:
+            print('something was wrong with the text jumbotron')
+            continue
+        
+        # get title of short story
+        try:
+            title = None
+            author = None
+            title = text_jumbotron.find("cite").get_text()
+            author = text_jumbotron.find("h3").get_text()[3:] # this slice removes the 'by ' part of the author line
+            if not title or not author:
+                print('title/author not found')
+                continue
+        except:
+            print('something was wrong with the title/author')
+            continue
+        
+        # puts short story in the repository
+        params = (None, title, text, url, None, 'americanliterature.com', None, 'english', 1, author, 'short_story')
+        short_stories_list.add(params)
+        print('added short story', len(short_stories_list))
+    
+    pickle.dump(short_stories_list, open('langreader/scrape/jic.p', 'wb'))
+    corpus.insert_texts(short_stories_list, 'ShortStoryRepository')
+
+
+def scrape_news_site(url_list):
+    article_list = []
+    for url in url_list:
+
+        r = requests.get(url)
+        soup = BeautifulSoup(r.content, features='xml')
+
+        articles = soup.findAll('item')
+
+        for a in articles:
+            title = a.find('title')
+            if title:
+                title = title.text
+            print(title, flush=True)
+            link = a.find('link')
+            if link:
+                link = link.text
+            else:
+                continue
+            print(link, flush=True)
+            published = a.find('pubDate')
+            if published:
+                published = published.text
+            description = a.find('description')
+            if description:
+                description = description.text
+
+            downloaded = trafilatura.fetch_url(link)
+            text = trafilatura.extract(downloaded)
+            print('text recieved', flush=True)
+
+            article = (None, title, text, link, None, None, None, 'english', 1, None, 'news')
+            article_list.append(article)
+    
+    return article_list
+
 if __name__ == '__main__':
-    # get_times_articles()
-    # get_times_for_kids_articles()
-    scrape_wikipedia()
+    for i in scrape_news_site(['http://feeds.bbci.co.uk/news/rss.xml']):
+        print(i['title'])
+        print(i['link'])
+        print(i['text'])

@@ -10,15 +10,40 @@ CREATE TABLE Training (
     CHECK (difficult IN (0, 1))
 );
 
+# for english texts only (i.e. this table's kinda redundant)
+
+CREATE TABLE TestAndTraining (
+    article_text TEXT UNIQUE NOT NULL,
+    difficult BOOLEAN NOT NULL,
+    article_url TEXT UNIQUE NOT NULL,
+    grade_level INTEGER,
+    CHECK ((difficult = 1 AND grade_level IS null) OR (difficult = 0 AND grade_level IN (1, 2, 3, 5)))
+);
+
+CREATE TABLE UserRatings(
+    rating_id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    text_id INTEGER,
+    difficulty INTEGER,
+    interest INTEGER,
+
+    FOREIGN KEY (user_id) REFERENCES UsersTable (user_id) ON DELETE CASCADE,
+    FOREIGN KEY (text_id) REFERENCES Repository (article_id) ON DELETE CASCADE,
+    UNIQUE(user_id, text_id)
+);
 
 CREATE TABLE UsersTable(
     user_id INTEGER PRIMARY KEY,
     username TEXT UNIQUE, 
-    password TEXT
+    password TEXT,
+    last_poem_id INTEGER,
+    last_short_story_id INTEGER,
+    last_news_id INTEGER
 );
 
 
-# if the text_type is 'gutenberg,' then the article_url will contain the book code rather than the actual url
+# contains the sorted poems; text_type='poem' or 'short_story' or 'news'
+
 CREATE TABLE Repository (
     article_id INTEGER PRIMARY KEY,
     article_title TEXT NOT NULL,
@@ -31,5 +56,28 @@ CREATE TABLE Repository (
     added_by INTEGER,
     article_author TEXT,
     text_type TEXT,
+
+    FOREIGN KEY (added_by) REFERENCES UsersTable (user_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX RepositoryIndices ON Repository(language, text_type, order_string);
+
+
+# to store project gutenberg files
+# the article_url will contain the Gutenberg book code rather than the actual url
+
+CREATE TABLE GutenbergTemp (
+    article_id INTEGER PRIMARY KEY,
+    article_title TEXT NOT NULL,
+    article_text TEXT UNIQUE,
+    article_url TEXT UNIQUE,
+    date_time_added TEXT,
+    publication_or_publisher_name TEXT,
+    order_string TEXT,
+    language TEXT,
+    added_by INTEGER,
+    article_author TEXT,
+    text_type TEXT,
+    
     FOREIGN KEY (added_by) REFERENCES UsersTable (user_id) ON DELETE SET NULL
 );
