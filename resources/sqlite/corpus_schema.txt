@@ -6,17 +6,8 @@ CREATE TABLE Training (
     article_url TEXT UNIQUE,
     grade_level INTEGER,
     language TEXT NOT NULL,
+    pair TEXT,
     CHECK (difficult IN (0, 1))
-);
-
-# for english texts only (i.e. this table's kinda redundant)
-
-CREATE TABLE TestAndTraining (
-    article_text TEXT UNIQUE NOT NULL,
-    difficult BOOLEAN NOT NULL,
-    article_url TEXT UNIQUE NOT NULL,
-    grade_level INTEGER,
-    CHECK ((difficult = 1 AND grade_level IS null) OR (difficult = 0 AND grade_level IN (1, 2, 3, 5)))
 );
 
 

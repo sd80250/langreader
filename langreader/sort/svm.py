@@ -7,6 +7,7 @@ import langreader.sort.vectorize as v
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import SGDClassifier
+from sklearn import preprocessing
 import pickle
 import os, psutil
 import time
@@ -15,30 +16,39 @@ svm_model = None
 indexed_global_vector = None
 vectorizer = None
 
-def make_and_test_model(pairs_of_test_data, name='langreader/sort/resources/svm_model_varied_size.p', samples=270):
+def make_and_test_model(name='langreader/sort/resources/svm_model_varied_size.p', samples=270):
     #TODO: scrape new texts for training/testing
     # get training data
     print("making training data:", flush=True)
-    vectorizer = v.ReturnSubtractionWithNewCharacteristicsVectorizer()
-    X, y = vectorizer.make_test_and_training_data()
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.10)
+    vectorizer = v.VLRSWNCVectorizer()
+    X_train = []
+    y_train = []
+    X_test = []
+    y_test = []
+    for pair in ['time', 'wikipedia']:
+        one, two, three, four = vectorizer.make_test_and_training_data(pair)
+        X_train.extend(one)
+        y_train.extend(two)
+        X_test.extend(three)
+        y_test.extend(four)
 
-    print(XTrain.shape, yTrain.shape, XTest.shape, yTest.shape, end=' ')
-    # XTrain, yTrain, XTest, yTest = None, None, None, None
-    # for X_train, y_train, X_test, y_test in vectorizer.make_test_and_training_data(pairs_of_test_data):
-    #     if XTrain is None:
-    #         XTrain = X_train
-    #         yTrain = y_train
-    #         XTest = X_test
-    #         yTest = y_test
-    #     else:
-    #         XTrain = np.append(XTrain, X_train, axis=0)
-    #         yTrain = np.append(yTrain, y_train, axis=0)
-    #         XTest = np.append(XTest, X_test, axis=0)
-    #         yTest = np.append(yTest, y_test, axis=0)
-    #     print(XTrain.shape, yTrain.shape, XTest.shape, yTest.shape)
-    #     if (yTrain.size > samples):
-    #         break
+    X_train = np.asarray(X_train)
+    y_train = np.asarray(y_train)
+    X_test = np.asarray(X_test)
+    y_test = np.asarray(y_test)
+    print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+
+    # # normalize sentence length column for training
+    # scaler = preprocessing.StandardScaler().fit(X_train[:, [0]])
+    # X_train_slice = scaler.transform(X_train[:, [0]])
+    # X_train = np.concatenate((X_train_slice, X_train[:, 1:]), axis=1)
+    # print(X_train.shape)
+
+    # # same thing for test
+    # X_test_slice = scaler.transform(X_test[:, [0]])
+    # X_test = np.concatenate((X_test_slice, X_test[:, 1:]), axis=1)
+    # print(X_test.shape)
+
     print("done making training data")
 
     # make the svm go
@@ -50,10 +60,6 @@ def make_and_test_model(pairs_of_test_data, name='langreader/sort/resources/svm_
     print("dumping svm... ", end='', flush=True)
     pickle.dump(svm, open(name, 'wb'))
     print("done")
-
-    # train_on_kernel('poly', X_train, X_test, y_train, y_test)
-    # train_on_kernel('rbf', X_train, X_test, y_train, y_test)
-    # train_on_kernel('sigmoid', X_train, X_test, y_train, y_test)
 
 
 def train_on_kernel(kern, X_train, X_test, y_train, y_test, degree=8):
@@ -177,4 +183,4 @@ def compare(rfv_text1, rfv_text2, file_path='langreader/sort/resources/svm_model
 
 
 if __name__ == "__main__":
-    make_and_test_model(270)
+    make_and_test_model()

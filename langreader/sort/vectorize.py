@@ -10,21 +10,19 @@ import pickle
 from abc import ABC, abstractmethod
 import os
 from os import path
-from pycorenlp import StanfordCoreNLP
 
 stemmer = SnowballStemmer('english')
-nlp = StanfordCoreNLP('http://localhost:9000')
 
 # this method probably belongs in another file
 # hard: 0/False = the text is not hard, 1/True = the text is hard
-def get_training_texts(is_hard, database_file_path="resources/sqlite/corpus.sqlite"):
+def get_training_texts(is_hard, pair_name, database_file_path="resources/sqlite/corpus.sqlite"):
     # returns list of tuples of all articles which are easy or hard
     with sqlite3.connect(database_file_path) as con:
         cur = con.cursor()
         cur.execute("""
         SELECT article_text FROM Training
-        WHERE difficult=?
-        """, (is_hard,))
+        WHERE difficult=? AND pair=? AND language='English'
+        """, (is_hard, pair_name))
         return cur.fetchall()
 
 
@@ -41,7 +39,7 @@ def preprocess(text):
     return processed_text
 
 
-def relative_frequency_vector(text, fv=None, ret_new_characteristics=False):
+def relative_frequency_vector(text, fv=None, ret_new_characteristics=False, normalize=True):
     if fv is None:
         fv = {}
     # preprocessing the texts before we add them to the dictionary
@@ -58,7 +56,10 @@ def relative_frequency_vector(text, fv=None, ret_new_characteristics=False):
     for value in fv.values():
         total += value
     for key in fv:
-        fv[key] = fv[key] / total
+        if normalize:
+            fv[key] = fv[key] / total / 0.07 # 0.07 is the rough relative frequency of the word 'the' globally, making this essentially a min-max normalization
+        else:
+            fv[key] = fv[key] / total
 
     if ret_new_characteristics:
         new_characteristics = get_new_characteristics(text, processed_text)
@@ -113,11 +114,17 @@ def make_global_vector(delete_spurious_values=True, min_freq=1,
         print('done')
 
     print('making values log and fitting to training scale... ', end='', flush=True)
+    min_val = 1000000000
+    max_val = -1
     for key in js:
-        # scale the global vector to values closer to the values of input data; 0.07 is the avg. relative freq of the
-        # word 'the', while 18.03 is the log freq of the word 'the' all dictionary values should lie between 0 and
-        # 0.07, about the same range as the relative frequencies of texts
-        js[key] = (math.log(js[key]) - math.log(min_freq - .5)) * 0.07 / (18.03 - math.log(min_freq - .5))
+        min_val = min(min_val, js[key])
+        max_val = max(max_val, js[key])
+    min_val = math.log(min_val)
+    max_val = math.log(max_val)
+
+    for key in js:
+        # min-max normalization of log values
+        js[key] = (math.log(js[key]) - min_val) / (max_val - min_val)
     print('done')
 
     # store dictionary onto a binary file using pickle
@@ -127,39 +134,12 @@ def make_global_vector(delete_spurious_values=True, min_freq=1,
 
 
 def get_new_characteristics(text, preprocessed_text):
-    no_sentences = len(nltk.sent_tokenize(text))
     no_words = len(preprocessed_text)
+    no_sentences = len(nltk.sent_tokenize(text))
+
     avg_sentence_length = no_words/no_sentences
 
-
-    output = nlp.annotate(text, properties={'annotators': 'parse', 'outputFormat': 'json'})
-    total_depth = 0
-    total_nps = 0
-    total_vps = 0
-    total_sbars = 0
-    for sentence in output['sentences']:
-        parse_str = sentence['parse']
-        print(parse_str, flush=True)
-        depth = 0
-        max_depth = 0
-        for i in parse_str:
-            if i == '(':
-                depth += 1
-            elif i == ')':
-                depth -= 1
-            max_depth = max(depth, max_depth)
-        total_depth += max_depth
-
-        total_nps += parse_str.count('(NP')
-        total_vps += parse_str.count('(VP')
-        total_sbars += parse_str.count('(SBAR')
-    
-    avg_parse_tree_height = total_depth/no_sentences
-    avg_noun_phrases = total_nps/no_sentences
-    avg_verb_phrases = total_vps/no_sentences
-    avg_sbars = total_sbars/no_sentences
-
-    return (avg_sentence_length, avg_parse_tree_height, avg_noun_phrases, avg_verb_phrases, avg_sbars)
+    return (avg_sentence_length, )
 
 
 class Vectorizer(ABC):
@@ -234,14 +214,15 @@ class SubtractionVectorizer(Vectorizer):
 
 class SubtractionWithNewCharacteristicsVectorizer(SubtractionVectorizer):
     def prepare_for_svm(self, text_vector_A, text_vector_B, indexed_global_vector, new_characteristics_A=None, new_characteristics_B=None):
-        # new characteristics A and B should both be tuples of length 5 in this order:
-        # (average sentence length, parse tree height, number of noun phrases, number of verb phrases, number of SBARs)
-        # these five characteristics come first, in order, in the svm_vector
+        # new characteristics A and B should both be tuples of length 1 in this order:
+        # (average sentence length, )
+        # this characteristic comes first in the svm_vector
 
         if not new_characteristics_A or not new_characteristics_B:
             raise Exception('subtraction with new charcateristics vectorizer should have new_characteristics arguments!')
         no_of_entries = len(indexed_global_vector)
-        svm_vector = [0] * (5 + 2 * no_of_entries)
+        no_chars = len(new_characteristics_A)
+        svm_vector = [0] * (no_chars + 2 * no_of_entries)
 
         i = 0
         for characteristic in new_characteristics_A:
@@ -250,8 +231,8 @@ class SubtractionWithNewCharacteristicsVectorizer(SubtractionVectorizer):
 
         for key, value in text_vector_A.items():
             if key in indexed_global_vector:
-                svm_vector[indexed_global_vector[key][1] + 5] = value
-                svm_vector[indexed_global_vector[key][1] + 5 + no_of_entries] = indexed_global_vector[key][0]
+                svm_vector[indexed_global_vector[key][1] + no_chars] = value
+                svm_vector[indexed_global_vector[key][1] + no_chars + no_of_entries] = indexed_global_vector[key][0]
 
         i = 0
         for characteristic in new_characteristics_B:
@@ -260,8 +241,8 @@ class SubtractionWithNewCharacteristicsVectorizer(SubtractionVectorizer):
         
         for key, value in text_vector_B.items():
             if key in indexed_global_vector:
-                svm_vector[indexed_global_vector[key][1] + 5] -= value
-                svm_vector[indexed_global_vector[key][1] + 5 + no_of_entries] -= indexed_global_vector[key][0]
+                svm_vector[indexed_global_vector[key][1] + no_chars] -= value
+                svm_vector[indexed_global_vector[key][1] + no_chars + no_of_entries] -= indexed_global_vector[key][0]
 
         return svm_vector
 
@@ -455,7 +436,7 @@ class YieldVectorizer(Vectorizer):
                 test_results_list)
 
 
-class VariedLengthYieldVectorizer(YieldVectorizer):
+class VariedLengthReturnVectorizer(ReturnVectorizer):
     def make_test_and_training_data(self, test_train_split=.9):
         igv = get_indexed_global_vector()
 
@@ -600,7 +581,7 @@ class ReturnSubtractionWithNewCharacteristicsVectorizer(ReturnVectorizer, Subtra
             hard_vector, hard_chars = relative_frequency_vector(hard_texts_list[hard_index], ret_new_characteristics=True)
 
             vector = self.prepare_for_svm(easy_vector, hard_vector, igv, new_characteristics_A=easy_chars, new_characteristics_B=hard_chars)
-            svm_vectors_list.append()
+            svm_vectors_list.append(vector)
             results_list.append(-1)  # -1 means the difficulty of text1 < the difficulty of text2
             # same thing as previous two lines but swapped (the algorithm is not necessarily reversible, so it should
             # be trained that way)
@@ -608,18 +589,6 @@ class ReturnSubtractionWithNewCharacteristicsVectorizer(ReturnVectorizer, Subtra
             results_list.append(1)  # 1 means the difficulty of text1 > the difficulty of text2
 
         return np.asarray(svm_vectors_list), np.asarray(results_list)
-
-
-class ReturnConcatenationVectorizer(ConcatenationVectorizer, ReturnVectorizer):  # multiple inheritance!!!!
-    pass
-
-
-class YieldConcatenationVectorizer(ConcatenationVectorizer, YieldVectorizer):
-    pass
-
-
-class ReturnSubtractionVectorizer(SubtractionVectorizer, ReturnVectorizer):
-    pass
 
 
 class YieldSubtractionVectorizer(SubtractionVectorizer, YieldVectorizer):
@@ -657,8 +626,152 @@ class YieldSubtractionVectorizer(SubtractionVectorizer, YieldVectorizer):
                 test_results_list)
 
 
-class VariedLengthYieldSubtractionVectorizer(SubtractionVectorizer, VariedLengthYieldVectorizer):
-    pass
+class VLRSWNCVectorizer(SubtractionWithNewCharacteristicsVectorizer, VariedLengthReturnVectorizer):
+    def add_fv_and_chars(self, text, fv_list, chars_list):
+        fv, chars = relative_frequency_vector(text, ret_new_characteristics=True)
+        fv_list.append(fv)
+        chars_list.append(chars)
+        
+
+    def make_test_and_training_data(self, pair, test_train_split=.9):
+        igv = get_indexed_global_vector()
+
+        print('getting articles... ', end='', flush=True)
+        easy_texts_list = [article[0] for article in get_training_texts(False, pair)]
+        hard_texts_list = [article[0] for article in get_training_texts(True, pair)]
+        print(len(easy_texts_list), len(hard_texts_list))
+
+        # splits texts up into short, normal, and long groups randomly
+        random.shuffle(easy_texts_list)
+        random.shuffle(hard_texts_list)
+        
+        test_amount = int(min(len(easy_texts_list), len(hard_texts_list))*(1-test_train_split))
+        easy_texts_list_test_ = easy_texts_list[:test_amount]
+        hard_texts_list_test_ = hard_texts_list[:test_amount]
+        
+
+        easy_texts_list = easy_texts_list[test_amount:]
+        hard_texts_list = hard_texts_list[test_amount:]
+
+        short_amount = int(len(easy_texts_list)/6.2/5)
+        normal_amount = int(len(easy_texts_list)/6.2)
+
+        easy_short_texts_list = easy_texts_list[:short_amount]
+        easy_normal_texts_list = easy_texts_list[short_amount:short_amount+normal_amount]
+        easy_long_texts_list = easy_texts_list[short_amount+normal_amount:]
+
+        short_amount = int(len(hard_texts_list)/6.2/5)
+        normal_amount = int(len(hard_texts_list)/6.2)
+
+        hard_short_texts_list = hard_texts_list[:short_amount]
+        hard_normal_texts_list = hard_texts_list[short_amount:short_amount+normal_amount]
+        hard_long_texts_list = hard_texts_list[short_amount+normal_amount:]
+        
+        easy_texts_list = []
+        easy_chars_list = []
+        hard_texts_list = []
+        hard_chars_list = []
+
+        # process short texts
+        print('processing short texts...', end=' ', flush=True)
+        for text in easy_short_texts_list:
+            sent_list = nltk.sent_tokenize(text)
+            parts = min(random.randint(3, 8), len(sent_list))
+            
+            i = 0
+            for part in range(1, parts + 1):
+                j = int(part/parts*len(sent_list))
+                self.add_fv_and_chars(' '.join(sent_list[i:j]), easy_texts_list, easy_chars_list)
+                i = j
+
+        for text in hard_short_texts_list:
+            sent_list = nltk.sent_tokenize(text)
+            parts = min(random.randint(3, 8), len(sent_list))
+            
+            i = 0
+            for part in range(1, parts + 1):
+                j = int(part/parts*len(sent_list))
+                self.add_fv_and_chars(' '.join(sent_list[i:j]), hard_texts_list, hard_chars_list)
+                i = j
+
+        print('done', len(easy_texts_list), len(hard_texts_list))
+
+        # process normal texts
+        print('processing normal texts...', end=' ', flush=True)
+        for text in easy_normal_texts_list:
+            self.add_fv_and_chars(text, easy_texts_list, easy_chars_list)
+        
+        for text in hard_normal_texts_list:
+            self.add_fv_and_chars(text, hard_texts_list, hard_chars_list)
+        print("done", len(easy_texts_list), len(hard_texts_list))
+
+        # process long texts
+        print('processing long texts...', end=' ', flush=True)
+        index = 0
+        while index < len(easy_long_texts_list):
+            jndex = index + random.randint(2, 8)
+            text_string = '\n'.join(easy_long_texts_list[index:jndex])
+            self.add_fv_and_chars(text_string, easy_texts_list, easy_chars_list)
+            index = jndex
+
+        index = 0
+        while index < len(hard_long_texts_list):
+            jndex = index + random.randint(2, 8)
+            text_string = '\n'.join(hard_long_texts_list[index:jndex])
+            self.add_fv_and_chars(text_string, hard_texts_list, hard_chars_list)
+            index = jndex
+        print("done", len(easy_texts_list), len(hard_texts_list))
+        print("done")
+
+        # create the vectors
+        print('creating training vectors...', end=' ', flush=True)
+        random.shuffle(easy_texts_list)
+        random.shuffle(hard_texts_list)
+        random.shuffle(easy_texts_list_test_)
+        random.shuffle(hard_texts_list_test_)
+
+        sgd_vectors_list = []
+        training_results_list = []
+
+        test_vectors_list = []
+        test_results_list = []
+
+        for easy_text, easy_char, hard_text, hard_char in zip(easy_texts_list, easy_chars_list, hard_texts_list, hard_chars_list):
+            
+            vector = self.prepare_for_svm(easy_text, hard_text, igv, new_characteristics_A=easy_char, new_characteristics_B=hard_char)
+            sgd_vectors_list.append(vector)
+            training_results_list.append(-1)  
+
+            sgd_vectors_list.append([i * -1 for i in vector])
+            training_results_list.append(1)
+        print("done")
+
+        # make test vectors
+        print('creating test vectors...', end=' ', flush=True)
+        easy_texts_list_test = []
+        easy_chars_list_test = []
+        hard_texts_list_test = []
+        hard_chars_list_test = []
+
+        for a in easy_texts_list_test_:
+            self.add_fv_and_chars(a, easy_texts_list_test, easy_chars_list_test)
+
+        for a in hard_texts_list_test_:
+            self.add_fv_and_chars(a, hard_texts_list_test, hard_chars_list_test)
+
+        for easy_text, easy_char, hard_text, hard_char in zip(easy_texts_list_test, easy_chars_list_test, hard_texts_list_test, hard_chars_list_test):
+
+            vector = self.prepare_for_svm(easy_text, hard_text, igv, new_characteristics_A=easy_char, new_characteristics_B=hard_char)
+            test_vectors_list.append(vector)
+            test_results_list.append(-1)
+
+            test_vectors_list.append([i * -1 for i in vector])
+            test_results_list.append(1)
+        print("done")
+        
+        return sgd_vectors_list, training_results_list, test_vectors_list, test_results_list   
+ 
+
 
 # temporary functions to make fv.txt conform with text preprocessing:
 
@@ -767,5 +880,29 @@ def fix_fv():
 
 
 if __name__ == '__main__':
-    text = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
+    text = """
+    Local elections was held in  Cabuyao City on May 9, 2016 within the Philippine general election. The voters elected for the elective local posts in the city: the mayor, vice mayor, and ten councilors.
+
+
+== Overview ==
+Incumbent Mayor Isidro "Jun" L. Hemedes, Jr. decided not to run for mayor his son, Councilor Ismael Hemedes is running for Mayor under the Nacionalista Party, His opponents were Julio Alcasabas of the Liberal Party, Incumbent Vice Mayor Rommel Gecolea of PDP–Laban and Councilor Jaime Batallones of the United Nationalist Alliance.
+Vice Mayor Rommel Gecolea is term-limited, Incumbent Mayor Jun Hemedes, Jr. is running in that position, His opponents were councilors Jose Benson "Sonny" Aguillo, son of Proceso and Nila Aguillo and Benjamin Del Rosario.
+
+
+== Candidates ==
+^1  Running as an Independent candidate
+
+
+=== Mayor ===
+
+
+=== Vice Mayor ===
+
+
+=== Councilors ===
+
+
+== References ==
+    """
     print(get_new_characteristics(text, preprocess(text)))
+
