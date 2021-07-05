@@ -6,6 +6,7 @@ CREATE TABLE Training (
     article_url TEXT UNIQUE,
     grade_level INTEGER,
     language TEXT NOT NULL,
+    pair TEXT,
     CHECK (difficult IN (0, 1))
 );
 
@@ -30,7 +31,6 @@ CREATE TABLE UserRatings(
     FOREIGN KEY (text_id) REFERENCES Repository (article_id) ON DELETE CASCADE,
     UNIQUE(user_id, text_id)
 );
-
 
 CREATE TABLE UsersTable(
     user_id INTEGER PRIMARY KEY,

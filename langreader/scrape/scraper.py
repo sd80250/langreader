@@ -13,10 +13,13 @@ from selenium.webdriver.chrome.options import Options
 
 import sys
 import os
+from os import path
 sys.path.insert(0, "")
 
 import langreader.app.corpus as corpus
 import pickle
+import wikipedia
+import math
 import trafilatura
 
 
@@ -52,7 +55,7 @@ def scrape_time_for_kids_links(URL, links_list: set):
 
 
 def get_times_articles():  # txt is what text file to put the scraped articles in
-    # find the URLs to 600+ Time articles
+    # find the URLs to 2400+ Time articles
     links_list = set()  # making list into a set ensures no duplicates
     for section in ['us', 'politics', 'world', 'health', 'business', 'tech', 'entertainment', 'ideas', \
                     'science', 'history', 'newsfeed', 'sports']:
@@ -62,8 +65,8 @@ def get_times_articles():  # txt is what text file to put the scraped articles i
         scrape_time_links('https://time.com/section/' + section + '/', links_list)
 
         page = 2
-        # crawl each webpage until at least 50 articles come from that section
-        while len(links_list) - original_links_list_size < 50:
+        # crawl each webpage until at least 200 articles come from that section
+        while len(links_list) - original_links_list_size < 200:
             scrape_time_links('https://time.com/section/' + section + '/?page=' + str(page), links_list)
             page += 1
             print('length of links list:', len(links_list))
@@ -78,31 +81,35 @@ def get_times_articles():  # txt is what text file to put the scraped articles i
         article_string = ""
         for paragraph in soup.find_all('p')[:-1]:  # omit the last paragraph, which is an email address
             article_string += paragraph.get_text() + "\n"
-        text_list.append((article_string, 1, 'https://time.com' + link, None))
+        text_list.append((article_string, 1, 'https://time.com' + link, None, "English", 'time'))
         number += 1
 
     # put the text in a database
-    with sqlite3.connect("corpus.sqlite") as con:
+    with sqlite3.connect("resources/sqlite/corpus.sqlite") as con:
         cur = con.cursor()
         cur.executemany("""
-		INSERT OR IGNORE INTO TestAndTraining(article_text, difficult, article_url, grade_level)
-		VALUES(?,?,?,?)
+		INSERT OR IGNORE INTO Training
+		VALUES(?,?,?,?,?,?)
 		""", text_list)
 
 
 def get_times_for_kids_articles():
-    # find URLs for 600+ webpages
+    # find URLs for 2400+ webpages
     links_list = set()
 
     for grade in ['k1', 'g2', 'g34', 'g56']:
         original_links_list_size = len(links_list)
         page = 1
 
-        # crawl each webpage until there are 150 articles in the grade
-        while len(links_list) - original_links_list_size < 150:
+        # crawl each webpage until there are 600 articles in the grade
+        while len(links_list) - original_links_list_size < 600:
+            prev_size = len(links_list)
             scrape_time_for_kids_links("https://www.timeforkids.com/" + grade + "/page/" + str(page) + "/", links_list)
+            if (prev_size == len(links_list)): # if the grade level doesn't have enough pages, then break
+                break
             page += 1
             print('length of links list:', len(links_list))
+            
 
     # from the URLs, scrape the text
     text_list = []
@@ -118,16 +125,16 @@ def get_times_for_kids_articles():
                 span.extract()
             article_string += paragraph.get_text() + "\n"
         text_list.append((article_string, 0, link, link[
-            29]))  # denotes grade level: either 1, 2, 3, or 5, depending on whether it's 'k1', 'g2', 'g34', or 'g56'
+            29], 'English', 'time'))  # denotes grade level: either 1, 2, 3, or 5, depending on whether it's 'k1', 'g2', 'g34', or 'g56'
         print("scraped link", number, "with values", 0, link, link[29])
         number += 1
 
     # put the text in a database
-    with sqlite3.connect("corpus.sqlite") as con:
+    with sqlite3.connect("resources/sqlite/corpus.sqlite") as con:
         cur = con.cursor()
         cur.executemany("""
-		INSERT or IGNORE INTO TestAndTraining(article_text, difficult, article_url, grade_level)
-		VALUES(?,?,?,?)
+		INSERT or IGNORE INTO Training
+		VALUES(?,?,?,?,?,?)
 		""", text_list)
 
 
@@ -231,6 +238,62 @@ def try_scraping_spanish_site():
 
     # response = browser.submit_selected()
     # browser.launch_browser()
+
+# --scraping Wikipedia and Simple Wikipedia--
+def find_and_append_random_texts(n, to_insert, difficult):
+    if difficult:
+        wikipedia.set_lang('en')
+    else:
+        wikipedia.set_lang('simple')
+
+    
+    texts = wikipedia.random(n)
+    if n == 1:
+        texts = [texts]
+    for text in texts:
+        try:
+            page = wikipedia.page(text)
+        except:
+            print('\nfinding another text')
+            find_and_append_random_texts(1, to_insert, difficult)
+            continue
+        to_insert.append((page.content, 1 if difficult else 0, page.url, None, "English", "wikipedia"))
+        print(len(to_insert), end='\r', flush=True)
+
+
+def scrape_wikipedia():
+    hard_insert = []
+    easy_insert = []
+    if path.exists('langreader/scrape/wiki.p'):
+        hard_insert = pickle.load(open('langreader/scrape/wiki.p','rb'))
+    if path.exists('langreader/scrape/simple_wiki.p'):
+        easy_insert = pickle.load(open('langreader/scrape/simple_wiki.p', 'rb'))
+    try:
+        print("scraping hard texts")
+        target = 1400 - len(hard_insert)
+        division = math.ceil(target/500)
+        for i in range(division):
+            find_and_append_random_texts(target//division, hard_insert, True)
+        print('\ndone\nscraping easy texts')
+
+        target = 1400 - len(easy_insert)
+        division = math.ceil(target/500)
+        for i in range(division):
+            find_and_append_random_texts(target//division, easy_insert, False)
+        print('\ndone')
+
+        to_insert = hard_insert + easy_insert
+        
+        with sqlite3.connect('resources/sqlite/corpus.sqlite') as con:
+            cur = con.cursor()
+            cur.executemany("INSERT OR IGNORE INTO Training VALUES (?, ?, ?, ?, ?, ?)", to_insert)
+    except Exception as e:
+        print("dumping because", e)
+        pickle.dump(hard_insert, open('langreader/scrape/wiki.p', 'wb'))
+        pickle.dump(easy_insert, open('langreader/scrape/simple_wiki.p', 'wb'))
+    
+
+    
 
 
 # --scraping americanliterature.com--
@@ -347,4 +410,3 @@ if __name__ == '__main__':
         print(i['title'])
         print(i['link'])
         print(i['text'])
-    
