@@ -45,17 +45,17 @@ CREATE TABLE UsersTable(
 # contains the sorted poems; text_type='poem' or 'short_story' or 'news'
 
 CREATE TABLE Repository (
-    article_id INTEGER PRIMARY KEY,
-    article_title TEXT NOT NULL,
-    article_text TEXT UNIQUE,
-    article_url TEXT UNIQUE,
-    date_time_added TEXT,
-    publication_or_publisher_name TEXT,
-    order_string TEXT,
-    language TEXT,
-    added_by INTEGER,
-    article_author TEXT,
-    text_type TEXT,
+    article_id INTEGER PRIMARY KEY, 0
+    article_title TEXT NOT NULL, 1
+    article_text TEXT UNIQUE, 2
+    article_url TEXT UNIQUE, 3
+    date_time_added TEXT, 4
+    publication_or_publisher_name TEXT, 5
+    order_string TEXT, 6
+    language TEXT, 7
+    added_by INTEGER, 8
+    article_author TEXT, 9
+    text_type TEXT, 10
 
     FOREIGN KEY (added_by) REFERENCES UsersTable (user_id) ON DELETE SET NULL
 );

@@ -52,6 +52,23 @@ def get_order_strings(text_type, language='english'):
 
 
 # --insert methods--
+def resort(text_type, language = 'english'):
+    # get all values from text_type
+    c.execute('SELECT * FROM Repository WHERE language = ? AND text_type = ?', (language, text_type))
+    texts_list = [list(i) for i in c.fetchall()]
+    # print(texts_list[0])
+    # quit()
+
+    # delete text_type
+    c.execute('DELETE FROM Repository WHERE language = ? AND text_type = ?', (language, text_type))
+    
+    # reinsert text_type
+    print('inserting texts... ', end='', flush=True)
+    insert_texts(texts_list, text_type)
+    print('done')
+
+    conn.commit()
+
 
 # values should be an 11-tuple
 # THIS METHOD DOES NOT COMMIT BY ITSELF; A SEPARATE CALL TO conn.commit() IS REQUIRED
@@ -61,14 +78,14 @@ def insert(values): # returns true if command executed successfully; else return
     try:
         c.execute('INSERT INTO Repository VALUES (null, ?, ?, ?, datetime("now"), ?, ?, ?, ?, ?, ?)', values_modified)
         return True
-    except Exception:
-        print('insert failed:', repr(Exception))
+    except Exception as e:
+        print('insert failed:', repr(e))
         return False
     # print('insert')
 
 
 # --sorting methods--
-def reindex(text_type): # unfinished
+def reindex(text_type):
     c.execute('SELECT article_id FROM Repository WHERE order_string IS NOT NULL AND text_type = ? ORDER BY order_string', (text_type,))
     article_ids = [i[0] for i in c.fetchall()]
 
@@ -183,6 +200,7 @@ def bin_search_corpus(text, k_max, text_type, language='english'):
     middle = (top + bottom) // 2
     k = k_max
     rfv_text = v.relative_frequency_vector(text)
+    new_characteristics = v.get_new_characteristics(text, v.preprocess(text))
     
     while top >= bottom:
         # if k is too big, which would make the index i out of bounds, then set k to the maximum
@@ -191,7 +209,7 @@ def bin_search_corpus(text, k_max, text_type, language='english'):
             k = (top - bottom) // 2
         difficult_texts = 0 
         for i in range(middle - k, middle + k + 1):
-            if compare(rfv_text, v.relative_frequency_vector(get_all(text_type, order_strings[i])[2])) < 0: # 2 > article_text
+            if svm.compare(rfv_text, new_characteristics, get_all(text_type, order_strings[i])[2]) < 0: # 2 > article_text
                 difficult_texts += 1
         if difficult_texts > k: 
             top = middle - 1
@@ -202,9 +220,6 @@ def bin_search_corpus(text, k_max, text_type, language='english'):
     # print('result: ' + str(bottom))
     return bottom
 
-
-def compare(rfv_text1, rfv_text2):
-    return svm.compare(rfv_text1, rfv_text2)
 
 
 # --helper methods--
@@ -273,4 +288,4 @@ def update_titles(text_type):
 
 if __name__ == '__main__':
     # testing purposes
-    pass
+    reindex('short_story')

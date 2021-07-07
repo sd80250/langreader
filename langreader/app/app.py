@@ -110,7 +110,7 @@ def create_usertable():
         last_poem_id INTEGER,
         last_short_story_id INTEGER,
         last_news_id INTEGER
-    );''')
+    )''')
 
 def add_userdata(username, password): # returns whether sign up was successful
     c1.execute('SELECT * FROM UsersTable WHERE username = ?', (username,))

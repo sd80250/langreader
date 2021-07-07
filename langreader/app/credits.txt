@@ -1,0 +1,7 @@
+americanliterature.com for providing short stories
+Poetry Foundation for providing poems
+bbc.com, newyorktimes.com, cnn.com, fox.com for providing news
+Sorting Texts By Readability, Tanaka-Ishii et al. (2008) for inspiring initial algorithm/project in the first place
+Deep Neural Networks for YouTube Recommendations, Covington et al. (2016) for inspiring later algorithms
+# Label Partitioning For Sublinear Ranking, Weston et al. (2013) for detailing efficient ranking algorithm
+The Percentage of Words Known in a Text and Reading Comprehension, Schmitt et al. (2011) for inspiring the checklist

@@ -44,7 +44,7 @@ def relative_frequency_vector(text, fv=None, ret_new_characteristics=False, norm
         fv = {}
     # preprocessing the texts before we add them to the dictionary
     processed_text = preprocess(text)
-    for word in text:
+    for word in processed_text:
         # if not already in frequency vector, initialize a value of 1
         if word not in fv:
             fv[word] = 1

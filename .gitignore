@@ -12,3 +12,4 @@ resources/chromedriver
 resources/.DS_store
 stanford-corenlp-4.2.2/
 .DS_Store
+resources/sqlite/corpus.sqlite

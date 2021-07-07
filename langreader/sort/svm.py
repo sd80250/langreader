@@ -167,7 +167,7 @@ def load_model(file_path):
     return pickle.load(open(file_path, 'rb'))
 
 
-def compare(rfv_text1, rfv_text2, file_path='langreader/sort/resources/svm_model.p'):
+def compare(rfv_text1, new_characteristics1, text2, file_path='langreader/sort/resources/svm_model_varied_size.p'):
     global svm_model
     global indexed_global_vector
     global vectorizer
@@ -177,9 +177,9 @@ def compare(rfv_text1, rfv_text2, file_path='langreader/sort/resources/svm_model
     if not indexed_global_vector:
         indexed_global_vector = v.get_indexed_global_vector()
     if not vectorizer:
-        vectorizer = v.ReturnSubtractionVectorizer()
+        vectorizer = v.VLRSWNCVectorizer()
     
-    return svm_model.predict(np.asarray(vectorizer.prepare_for_svm(rfv_text1, rfv_text2, indexed_global_vector)).reshape((1, -1)))
+    return svm_model.predict(np.asarray(vectorizer.prepare_for_svm(rfv_text1, v.relative_frequency_vector(text2), indexed_global_vector, new_characteristics_A=new_characteristics1, new_characteristics_B=v.get_new_characteristics(text2, v.preprocess(text2)))).reshape((1, -1)))
 
 
 if __name__ == "__main__":

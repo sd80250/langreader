@@ -22,6 +22,9 @@ import wikipedia
 import math
 import trafilatura
 
+import pause
+from datetime import datetime, timedelta
+
 
 # soup is the html (but transformed into a python-manipulatable object)
 # that comes from scraping a website
@@ -139,45 +142,45 @@ def get_times_for_kids_articles():
 
 
 # --scraping Project Gutenburg texts--
-# def scrape_christian_texts():
-#     # urls = set()
-#     # for start_index in range(1, 177, 25):
-#     #     soup = get_soup_from_URL('https://www.gutenberg.org/ebooks/bookshelf/119?start_index=' + str(start_index))
-#     #     booklinks = soup.find_all('li', class_='booklink')
-#     #     for booklink in booklinks:
-#     #         urls.add(booklink.find('a').get('href'))
+def scrape_christian_texts():
+    # urls = set()
+    # for start_index in range(1, 177, 25):
+    #     soup = get_soup_from_URL('https://www.gutenberg.org/ebooks/bookshelf/119?start_index=' + str(start_index))
+    #     booklinks = soup.find_all('li', class_='booklink')
+    #     for booklink in booklinks:
+    #         urls.add(booklink.find('a').get('href'))
 
-#     urls = pickle.load(open('resources/poems/gutenberg_urls.p', 'rb'))
+    urls = pickle.load(open('resources/poems/gutenberg_urls.p', 'rb'))
     
-#     index = 0
-#     for stub in urls:
-#         ebook_code = int(stub[8:]) # gets rid of the initial '/ebook/' in string
-#         print('index', index, 'scraping', str(ebook_code) + '...', end=' ', flush=True)
+    index = 0
+    for stub in urls:
+        ebook_code = int(stub[8:]) # gets rid of the initial '/ebook/' in string
+        print('index', index, 'scraping', str(ebook_code) + '...', end=' ', flush=True)
 
-#         try:
-#             # see if the book is in English
-#             if 'en' not in get_metadata('language', ebook_code):
-#                 raise NameError('english not in language')
+        try:
+            # see if the book is in English
+            if 'en' not in get_metadata('language', ebook_code):
+                raise NameError('english not in language')
             
-#             # get text and insert the url within the corpus
-#             text = strip_headers(load_etext(ebook_code)).strip()
-#             title = list(get_metadata('title', ebook_code))[0]
-#             author = list(get_metadata('author', ebook_code))
-#             author = author[0] if len(author) > 0 else None
-#             corpus.insert_in_corpus(title, text, 2, \
-#                 url=ebook_code, \
-#                 author=author, exclude_text=True, text_type='gutenberg')
-#         except Exception as e:
+            # get text and insert the url within the corpus
+            text = strip_headers(load_etext(ebook_code)).strip()
+            title = list(get_metadata('title', ebook_code))[0]
+            author = list(get_metadata('author', ebook_code))
+            author = author[0] if len(author) > 0 else None
+            corpus.insert_in_corpus(title, text, 2, \
+                url=ebook_code, \
+                author=author, exclude_text=True, text_type='gutenberg')
+        except Exception as e:
 
-#             print(e, 'continue')
-#             index += 1
-#             continue
+            print(e, 'continue')
+            index += 1
+            continue
         
-#         print('done')
-#         index += 1
+        print('done')
+        index += 1
 
-#     corpus.conn.commit()
-#     print('changes committed')
+    corpus.conn.commit()
+    print('changes committed')
 
 
 # --scraping Spanish texts--
@@ -293,9 +296,6 @@ def scrape_wikipedia():
         pickle.dump(easy_insert, open('langreader/scrape/simple_wiki.p', 'wb'))
     
 
-    
-
-
 # --scraping americanliterature.com--
 def scrape_short_stories():
     # get urls to short stories
@@ -369,7 +369,7 @@ def scrape_short_stories():
     corpus.insert_texts(short_stories_list, 'ShortStoryRepository')
 
 
-def scrape_news_site(url_list):
+def scrape_news_site(url_list, language='english', text_type='news'):
     article_list = []
     for url in url_list:
 
@@ -400,13 +400,34 @@ def scrape_news_site(url_list):
             text = trafilatura.extract(downloaded)
             print('text recieved', flush=True)
 
-            article = (None, title, text, link, None, None, None, 'english', 1, None, 'news')
+            article = (None, title, text, link, None, None, None, language, 1, None, text_type)
             article_list.append(article)
     
     return article_list
 
+def ongoing_scrape():
+    with open('langreadre/scrape/rss.txt', 'r') as f:
+        url_list = f.readlines()
+    while True:
+        # go through the news list and scrape each link
+        news_list = scrape_news_site(url_list)
+        corpus.insert_texts(news_list, 'news')
+
+        # go through the corpus and delete news older than seven days
+        with sqlite3.connect("resources/sqlite/corpus.sqlite") as conn:
+            o_strs = corpus.get_order_strings()
+            del_set = {}
+            for o_str in o_strs:
+                if datetime.strptime(corpus.get_all(o_str)[4], '%Y-%m-%d %H:%M:%S') < datetime.now() - timedelta(days=7):
+                    del_set.add(('english', 'news', o_str))
+            
+            c = conn.cursor()
+            c.executemany("DELETE FROM Repository WHERE language = ? AND text_type = ? AND order_string = ?", del_set)
+        
+        # wait until next hour
+        pause.until(datetime.now().replace(microsecond=0, second=0, minute=0) + timedelta(hours=1))
+
 if __name__ == '__main__':
-    for i in scrape_news_site(['http://feeds.bbci.co.uk/news/rss.xml']):
-        print(i['title'])
-        print(i['link'])
-        print(i['text'])
+    get_times_articles()
+    get_times_for_kids_articles()
+    scrape_wikipedia()
