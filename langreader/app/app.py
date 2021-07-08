@@ -248,7 +248,7 @@ def get_next_indices(difficulty, index):
 #TODO: add functionality for adding a new text to corpus if the user wants to
 def run_application():
     print("running 3; Printing because loggedIn is {0} and index is {1}".format(ss.loggedIn, ss.index))
-    set_last(ss.text_type)
+    # set_last(ss.text_type)
     st.success("Welcome, {}!".format(ss.username))
     
     st.write(ss.index + 1, '/', ss.corpus_length)
