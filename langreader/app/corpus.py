@@ -288,4 +288,5 @@ def update_titles(text_type):
 
 if __name__ == '__main__':
     # testing purposes
-    reindex('short_story')
+    resort('poem')
+    reindex('poem')

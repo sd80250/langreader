@@ -12,7 +12,7 @@ conn1 = sqlite3.connect("resources/sqlite/corpus.sqlite")
 c1 = conn1.cursor()
 
 # session state
-ss = session.get(username=None, loggedIn=False, index=None, button_submitted=False, done_setting_up=False, 
+ss = session.get(username=None, loggedIn=False, index=-1, button_submitted=False, done_setting_up=False, 
     corpus_length=None, order_strings=None, text_type=None,
     params=None) # TODO: add a language variable
 
@@ -27,13 +27,13 @@ def set_text_type(text_type):
         ss.text_type = text_type
         ss.corpus_length = corpus.get_corpus_length(ss.text_type)
         ss.order_strings = corpus.get_order_strings(ss.text_type)
-        ss.index = None
+        ss.index = -1
         ss.params = None
 
 
 # initialization
 def initialization():
-    if not ss.index:
+    if ss.index < 0:
         last_index = get_last(ss.text_type)
         if not last_index and last_index != 0:
             ss.corpus_length = corpus.get_corpus_length(ss.text_type)
@@ -61,11 +61,11 @@ def main():
     st.title("Project READ")
 
     if not ss.loggedIn:
-        menu = ["Home", "Login", "Signup"]
+        menu = ["Home", "Login"] # removed signup option
         choice = st.sidebar.selectbox("Menu", menu)
 
         if choice == "Home":
-            st.subheader("Home")
+            pass
         
         elif choice == "Login":
             login()
@@ -75,16 +75,20 @@ def main():
         
         st.info("You are currently not logged in. Head to the Login tab on the sidebar menu.")
         
-        welcome_text = """Welcome! Project READ is an up-incoming application that enables English learners to enhance their reading comprehension in a fun, relevant context. Our platform provides short written pieces tailored to a user's interests and is designed to be used in <10 minutes each day."""
+        welcome_text = """Welcome! Project READ is an up-and-coming application that enables English learners to enhance their reading comprehension by providing compelling and comprehensible input. Our platform provides short written pieces from all over the Internet tailored to users' unique English abilities and is designed to be used in <10 minutes each day."""
         
         st.write(welcome_text + "\n")
         st.write("**Diverse Corpus:** Users have access to a wide range of texts from short stories to news articles to poems.\n")
         st.write("**ML-driven:** While users have the ability to choose texts to read independently, Project READ constantly recommends texts based on a user's current reading level.\n")
-        st.write("**Reading Aids:** Our application integrates a variety of reading tools, such as an in-platform dictionary and audio reader, to maximize the learning experience.\n")
+        st.write("**Reading Aids:** Our application integrates a variety of reading tools, such as an in-platform dictionary and audio reader, to maximize the learning experience.\n\n")
+
+        st.write("To test our initial demo, use username _guest_ and password _guest_.")
+
+        st.write("If you have any questions or comments, or simply are interested in following our project, please feel free to contact asridharbaskari@ucdavis.edu or d.shawn@wustl.edu!")
         
         
     else:
-        menu = ["Poems", "Short Stories", "Sign Out"]
+        menu = ["Poems", "Short Stories", "Sign Out", "Credits"]
         choice = st.sidebar.selectbox("Menu", menu)
         if choice == "Poems":
             set_text_type('poem')
@@ -95,10 +99,16 @@ def main():
         elif choice == "Sign Out":
             if st.sidebar.button("Log out"):
                 reset()
-        
-        initialization()
+        if choice == "Credits":
+            st.subheader("Thanks to:")
+            with open('langreader/app/credits.txt') as f:
+                for line in f.readlines():
+                    st.write(line)
 
-        run_application()
+        else:
+            initialization()
+
+            run_application()
 
 # --username/password management--
 def create_usertable():
@@ -293,7 +303,7 @@ def run_application():
     if ss.button_submitted or submit: #TODO: make sure user doesn't get the same text twice!
         print("running 4; button pressed")
 
-        record_difficulty_and_interest(difficulty, interest, ss.username, 'english', ss.text_type,  ss.order_strings[ss.index])
+        # record_difficulty_and_interest(difficulty, interest, ss.username, 'english', ss.text_type,  ss.order_strings[ss.index])
 
         st.write('Here are some texts we thought would be appropriate:')
 
@@ -313,11 +323,11 @@ def run_application():
         
 
         with st.form('explicit_number'):
-            explicit_index = st.number_input('Or, go enter an index from 0 to ' + str(ss.corpus_length - 1) + ' to go to a custom text.', min_value=0, max_value=ss.corpus_length-1)
+            explicit_index = st.number_input('Or, go enter an index from 1 to ' + str(ss.corpus_length) + ' to go to a custom text.', min_value=1, max_value=ss.corpus_length)
             num_submit = st.form_submit_button()
         if num_submit:
             print('running 5; button pressed')
-            set_ss(explicit_index)
+            set_ss(explicit_index - 1)
             ss.button_submitted = False
             st.experimental_rerun()
 
